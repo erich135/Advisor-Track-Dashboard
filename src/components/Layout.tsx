@@ -11,10 +11,12 @@ import {
   Settings,
   BarChart3,
   UserCog,
+  LogOut,
 } from 'lucide-react';
 import { Avatar } from './ui';
 import { users } from '../data/seed';
 import { supportTickets } from '../data/seed';
+import { useAuth } from '../lib/useAuth';
 
 const openTickets = supportTickets.filter((t) => t.status !== 'resolved').length;
 
@@ -83,6 +85,7 @@ const titles: Record<string, { title: string; sub: string }> = {
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
+  const { signOut } = useAuth();
   const me = users[0];
   const matchKey =
     Object.keys(titles)
@@ -120,6 +123,13 @@ export default function Layout({ children }: { children: ReactNode }) {
             <div className="n">{me.name}</div>
             <div className="r">Super Admin · Founder</div>
           </div>
+          <button
+            onClick={signOut}
+            title="Sign out"
+            style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#768390', cursor: 'pointer', padding: 4, display: 'grid', placeItems: 'center' }}
+          >
+            <LogOut size={16} />
+          </button>
         </div>
       </aside>
 
