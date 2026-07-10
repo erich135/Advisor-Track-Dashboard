@@ -12,13 +12,14 @@ import {
 } from 'recharts';
 import { TrendingUp, CheckCircle2, Clock, Wallet } from 'lucide-react';
 import { seedDataService as db } from '../data/seedDataService';
+import { fetchDataService } from '../data/fetchDataService';
 import { useAsync } from '../lib/useAsync';
 import { Avatar, Pill, StatCard, SkeletonRows, PageIntro } from '../components/ui';
 import { formatZAR, formatDate } from '../lib/format';
 import { issuedCommission, potentialCommission } from '../lib/analytics';
 
 export default function ProductionPage() {
-  const cases = useAsync(() => db.getProductionCases());
+  const cases = useAsync(() => fetchDataService.getProductionCases());
   const advisors = useAsync(() => db.getAdvisors());
   const [status, setStatus] = useState<'all' | 'submitted' | 'issued'>('all');
 
