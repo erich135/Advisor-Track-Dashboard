@@ -4,6 +4,7 @@ import DashboardPage from './pages/DashboardPage';
 import AdvisorsPage from './pages/AdvisorsPage';
 import AdvisorDetailPage from './pages/AdvisorDetailPage';
 import ProductionPage from './pages/ProductionPage';
+import TeamPipelineDemoPage from './pages/TeamPipelineDemoPage';
 import SubscriptionsPage from './pages/SubscriptionsPage';
 import CompaniesPage from './pages/CompaniesPage';
 import InvoicesPage from './pages/InvoicesPage';
@@ -18,6 +19,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<DashboardPage />} />
         <Route path="/advisors" element={<AdvisorsPage />} />
+        <Route path="/team-pipeline-demo" element={<TeamPipelineDemoPage />} />
         <Route path="/advisors/:id" element={<AdvisorDetailPage />} />
         <Route path="/production" element={<ProductionPage />} />
         <Route path="/subscriptions" element={<SubscriptionsPage />} />
