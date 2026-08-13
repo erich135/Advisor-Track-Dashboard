@@ -1,10 +1,11 @@
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import {
   LayoutDashboard,
   Users,
   CreditCard,
   TrendingUp,
+  FolderKanban,
   FileText,
   LifeBuoy,
   Building2,
@@ -17,6 +18,7 @@ import { Avatar } from './ui';
 import { users } from '../data/seed';
 import { supportTickets } from '../data/seed';
 import { useAuth } from '../lib/useAuth';
+import { useDemoSession } from '../lib/demoSession';
 
 const openTickets = supportTickets.filter((t) => t.status !== 'resolved').length;
 
@@ -29,6 +31,7 @@ interface NavEntry {
 
 const primaryNav: NavEntry[] = [
   { to: '/', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
+  { to: '/team-pipeline-demo', label: 'Team Pipeline', icon: <FolderKanban size={18} /> },
   { to: '/advisors', label: 'Advisors', icon: <Users size={18} /> },
   { to: '/production', label: 'Production', icon: <TrendingUp size={18} /> },
 ];
@@ -72,6 +75,7 @@ function NavList({ items, founders }: { items: NavEntry[]; founders?: boolean })
 
 const titles: Record<string, { title: string; sub: string }> = {
   '/': { title: 'Dashboard', sub: 'Business overview across all advisors' },
+  '/team-pipeline-demo': { title: 'Team Pipeline', sub: 'Seeded ASI demo data only' },
   '/advisors': { title: 'Advisors', sub: 'Everyone using AdvisorTrack' },
   '/production': { title: 'Production', sub: 'Submitted vs issued commission' },
   '/subscriptions': { title: 'Subscriptions', sub: 'Licenses, trials & renewals' },
@@ -85,13 +89,39 @@ const titles: Record<string, { title: string; sub: string }> = {
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
-  const { signOut } = useAuth();
-  const me = users[0];
+  const navigate = useNavigate();
+  const { signOut, session } = useAuth();
+  const { selectedDemoUser, resetDemoUser } = useDemoSession();
+  const isDemoRoute = pathname.startsWith('/team-pipeline-demo');
   const matchKey =
     Object.keys(titles)
       .filter((k) => k !== '/' && pathname.startsWith(k))
       .sort((a, b) => b.length - a.length)[0] ?? '/';
-  const header = titles[matchKey];
+  const header =
+    isDemoRoute && selectedDemoUser
+      ? { title: 'Team Pipeline', sub: `${selectedDemoUser.name} · ${selectedDemoUser.role}` }
+      : titles[matchKey];
+
+  if (isDemoRoute && !selectedDemoUser) {
+    return <>{children}</>;
+  }
+
+  const me = users[0];
+  const sessionName = session
+    ? `${session.user.firstName ?? ''} ${session.user.lastName ?? ''}`.trim() || session.user.email
+    : me.name;
+  const sessionRole =
+    session?.role?.name ||
+    (session?.isPlatformAdmin ? 'Platform admin' : null) ||
+    'AdvisorTrack user';
+  const profile = isDemoRoute ? selectedDemoUser! : { ...me, name: sessionName };
+  const profileRole = isDemoRoute ? selectedDemoUser!.role : sessionRole;
+  const profileSub = isDemoRoute ? selectedDemoUser!.scopeLabel : session?.organisation?.name || sessionRole;
+  const isFounderDemo = isDemoRoute && selectedDemoUser?.role === 'Founder/Admin';
+  const profileAvatarColor = isDemoRoute ? (isFounderDemo ? '#8b5cf6' : '#1f6feb') : me.avatarColor;
+  const demoNav: NavEntry[] = isFounderDemo
+    ? [...primaryNav, ...businessNav, ...foundersNav, ...adminNav]
+    : [{ to: '/team-pipeline-demo', label: 'Team Pipeline', icon: <FolderKanban size={18} /> }];
 
   return (
     <div className="app-shell">
@@ -102,33 +132,72 @@ export default function Layout({ children }: { children: ReactNode }) {
           </span>
           <div>
             <div className="name">AdvisorTrack</div>
-            <div className="tag">Admin Console</div>
+            <div className="tag">{isDemoRoute && selectedDemoUser ? selectedDemoUser.role : 'Admin Console'}</div>
           </div>
         </div>
 
         <nav>
-          <div className="nav-section-label">Overview</div>
-          <NavList items={primaryNav} />
-          <div className="nav-section-label">Business</div>
-          <NavList items={businessNav} />
-          <div className="nav-section-label">Founders</div>
-          <NavList items={foundersNav} founders />
-          <div className="nav-section-label">Admin</div>
-          <NavList items={adminNav} />
+          {isDemoRoute && !isFounderDemo ? (
+            <>
+              <div className="nav-section-label">Demo</div>
+              <NavList items={demoNav} />
+            </>
+          ) : isDemoRoute && isFounderDemo ? (
+            <>
+              <div className="nav-section-label">Overview</div>
+              <NavList items={primaryNav} />
+              <div className="nav-section-label">Business</div>
+              <NavList items={businessNav} />
+              <div className="nav-section-label">Founders</div>
+              <NavList items={foundersNav} founders />
+              <div className="nav-section-label">Admin</div>
+              <NavList items={adminNav} />
+            </>
+          ) : (
+            <>
+              <div className="nav-section-label">Overview</div>
+              <NavList items={primaryNav} />
+              <div className="nav-section-label">Business</div>
+              <NavList items={businessNav} />
+              <div className="nav-section-label">Founders</div>
+              <NavList items={foundersNav} founders />
+              <div className="nav-section-label">Admin</div>
+              <NavList items={adminNav} />
+            </>
+          )}
         </nav>
 
         <div className="sidebar-foot">
-          <Avatar name={me.name} color={me.avatarColor} size={34} />
+          <Avatar name={profile.name} color={profileAvatarColor} size={34} />
           <div className="meta">
-            <div className="n">{me.name}</div>
-            <div className="r">Super Admin · Founder</div>
+            <div className="n">{profile.name}</div>
+            <div className="r">{profileRole}</div>
+            {isDemoRoute ? <div className="r" style={{ fontSize: 11 }}>{profileSub}</div> : null}
           </div>
           <button
-            onClick={signOut}
-            title="Sign out"
-            style={{ marginLeft: 'auto', background: 'none', border: 'none', color: '#768390', cursor: 'pointer', padding: 4, display: 'grid', placeItems: 'center' }}
+            onClick={() => {
+              if (isDemoRoute) {
+                resetDemoUser();
+                navigate('/team-pipeline-demo', { replace: true });
+                return;
+              }
+              signOut();
+            }}
+            title={isDemoRoute ? 'Switch demo user' : 'Sign out'}
+            style={{
+              marginLeft: 'auto',
+              background: 'none',
+              border: 'none',
+              color: '#768390',
+              cursor: 'pointer',
+              padding: 4,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
           >
             <LogOut size={16} />
+            <span style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{isDemoRoute ? 'Switch demo user' : 'Sign out'}</span>
           </button>
         </div>
       </aside>
@@ -141,7 +210,9 @@ export default function Layout({ children }: { children: ReactNode }) {
           <div className="sub">· {header.sub}</div>
           <div className="spacer" />
         </header>
-        <div className="page">{children}</div>
+        <div className="page" style={isDemoRoute ? { maxWidth: 'none' } : undefined}>
+          {children}
+        </div>
       </div>
     </div>
   );

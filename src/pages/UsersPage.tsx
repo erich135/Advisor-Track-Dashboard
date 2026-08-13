@@ -1,58 +1,188 @@
-import { useState, useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { UserPlus, X, Building2, Users } from 'lucide-react';
-import { seedDataService as db } from '../data/seedDataService';
+import { ApiError } from '../api/apiClient';
+import {
+  getCompanyMembers,
+  getCompanyMe,
+  getCompanyRoles,
+  type CompanyMember,
+  type CompanyRoleDetail,
+} from '../api/companyApi';
 import { useAsync } from '../lib/useAsync';
+import { useAuth } from '../lib/useAuth';
 import { Avatar, Pill, SkeletonRows, PageIntro, StatCard } from '../components/ui';
 import { formatDate } from '../lib/format';
 import type { ManagedUser } from '../domain/types';
 
-const roleLabels: Record<ManagedUser['role'], string> = {
-  CompanyAdmin: 'Company Admin',
-  TeamManager: 'Team Manager',
+const AVATAR_COLORS = ['#1f6feb', '#8957e5', '#2da44e', '#bf8700', '#cf222e', '#0969da', '#1a7f37'];
+
+function memberName(m: CompanyMember): string {
+  return `${m.firstName ?? ''} ${m.lastName ?? ''}`.trim() || m.email;
+}
+
+function avatarColorFor(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash + id.charCodeAt(i) * (i + 1)) % 997;
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
+
+type RoleBucket = 'admin' | 'manager' | 'other';
+
+/**
+ * Classify using Abel role permissions first, then role-name hints.
+ * Company admin system role includes view_team, so admin is checked before manager.
+ */
+function classifyRole(role: CompanyRoleDetail | null | undefined): RoleBucket {
+  if (!role) return 'other';
+  const perms = role.permissions ?? [];
+  const name = role.name.toLowerCase();
+
+  if (
+    perms.includes('manage_members') ||
+    perms.includes('manage_roles') ||
+    perms.includes('manage_company') ||
+    /\bcompany\s*admin\b/.test(name)
+  ) {
+    return 'admin';
+  }
+
+  if (
+    perms.includes('view_team') ||
+    /\bteam\s*manager\b/.test(name) ||
+    /\bteam\s*leader\b/.test(name) ||
+    /\bsupervisor\b/.test(name)
+  ) {
+    return 'manager';
+  }
+
+  return 'other';
+}
+
+function statusLabel(m: CompanyMember): string | null {
+  const status = m.subscription?.status?.trim();
+  return status ? status : null;
+}
+
+type UsersPageData = {
+  members: CompanyMember[];
+  roles: CompanyRoleDetail[];
+  companyName: string | null;
 };
-const roleTone: Record<ManagedUser['role'], string> = {
-  CompanyAdmin: 'purple',
-  TeamManager: 'blue',
-};
+
+async function loadUsersPage(sessionCompanyName: string | null): Promise<UsersPageData> {
+  const [members, roles, me] = await Promise.all([
+    getCompanyMembers(),
+    getCompanyRoles().catch(() => [] as CompanyRoleDetail[]),
+    sessionCompanyName
+      ? Promise.resolve(null)
+      : getCompanyMe().catch(() => null),
+  ]);
+
+  return {
+    members,
+    roles,
+    companyName: sessionCompanyName || me?.company?.name || null,
+  };
+}
 
 export default function UsersPage() {
-  const managed = useAsync(() => db.getManagedUsers());
-  const companies = useAsync(() => db.getCompanies());
-  const teams = useAsync(() => db.getTeams());
-  const [showModal, setShowModal] = useState(false);
-  const [localUsers, setLocalUsers] = useState<ManagedUser[] | null>(null);
+  const { session } = useAuth();
+  const sessionCompanyName = session?.company?.name || session?.organisation?.name || null;
+  const loaded = useAsync(() => loadUsersPage(sessionCompanyName), [sessionCompanyName]);
 
-  const list = localUsers ?? managed.data ?? [];
+  const roleById = useMemo(() => {
+    const map = new Map<string, CompanyRoleDetail>();
+    loaded.data?.roles.forEach((r) => map.set(r.id, r));
+    return map;
+  }, [loaded.data?.roles]);
 
-  const companyMap = useMemo(() => new Map(companies.data?.map((c) => [c.id, c]) ?? []), [companies.data]);
-  const teamMap = useMemo(() => new Map(teams.data?.map((t) => [t.id, t]) ?? []), [teams.data]);
+  const memberById = useMemo(() => {
+    const map = new Map<string, CompanyMember>();
+    loaded.data?.members.forEach((m) => map.set(m.id, m));
+    return map;
+  }, [loaded.data?.members]);
 
-  if (!managed.data || !companies.data || !teams.data) return <SkeletonRows rows={6} cols={4} />;
+  const stats = useMemo(() => {
+    const members = loaded.data?.members ?? [];
+    let admins = 0;
+    let managers = 0;
+    for (const m of members) {
+      const detail = m.role?.id ? roleById.get(m.role.id) : undefined;
+      const bucket = classifyRole(
+        detail ?? (m.role ? { id: m.role.id, name: m.role.name, permissions: [] } : null),
+      );
+      if (bucket === 'admin') admins += 1;
+      else if (bucket === 'manager') managers += 1;
+    }
+    return { total: members.length, admins, managers };
+  }, [loaded.data?.members, roleById]);
 
-  const admins = list.filter((u) => u.role === 'CompanyAdmin');
-  const managers = list.filter((u) => u.role === 'TeamManager');
-
-  function handleAdd(user: ManagedUser) {
-    setLocalUsers([...list, user]);
-    setShowModal(false);
+  if (loaded.loading && !loaded.data) {
+    return <SkeletonRows rows={6} cols={4} />;
   }
+
+  if (loaded.error && !loaded.data) {
+    const message =
+      loaded.error instanceof ApiError
+        ? loaded.error.message
+        : 'Unable to load users. Please try again.';
+    return (
+      <>
+        <PageIntro>
+          Manage company members and access. Founders (platform admins) are noted on the Settings page.
+        </PageIntro>
+        <div className="card">
+          <div className="empty" style={{ color: 'var(--red)' }}>
+            {message}
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  const members = loaded.data?.members ?? [];
+  const companyName = loaded.data?.companyName;
 
   return (
     <>
       <PageIntro>
-        Manage CompanyAdmin and TeamManager access. Founders (Super Admins) are on the Settings page.
+        Manage company members and access. Founders (platform admins) are noted on the Settings page.
       </PageIntro>
 
       <div className="grid grid-3">
-        <StatCard label="Company Admins" value={admins.length} icon={<Building2 size={18} />} iconBg="var(--purple-soft)" iconColor="var(--purple)" />
-        <StatCard label="Team Managers" value={managers.length} icon={<Users size={18} />} iconBg="var(--brand-soft)" iconColor="var(--brand)" />
-        <StatCard label="Companies with admin" value={new Set(list.map((u) => u.companyId)).size} icon={<Building2 size={18} />} iconBg="var(--green-soft)" iconColor="var(--green)" />
+        <StatCard
+          label="Total Members"
+          value={stats.total}
+          icon={<Users size={18} />}
+          iconBg="var(--green-soft)"
+          iconColor="var(--green)"
+        />
+        <StatCard
+          label="Company Admins"
+          value={stats.admins}
+          icon={<Building2 size={18} />}
+          iconBg="var(--purple-soft)"
+          iconColor="var(--purple)"
+        />
+        <StatCard
+          label="Team Managers"
+          value={stats.managers}
+          icon={<Users size={18} />}
+          iconBg="var(--brand-soft)"
+          iconColor="var(--brand)"
+        />
       </div>
 
       <div className="row between" style={{ margin: '20px 0 14px' }}>
         <h3 className="section-title" style={{ margin: 0 }}>All managed users</h3>
-        <button className="btn primary" onClick={() => setShowModal(true)}>
-          <UserPlus size={16} /> Add user
+        <button
+          className="btn primary"
+          type="button"
+          disabled
+          title="Invite / add member is not available yet"
+          style={{ opacity: 0.55, cursor: 'not-allowed' }}
+        >
+          <UserPlus size={16} /> Add user (coming soon)
         </button>
       </div>
 
@@ -70,45 +200,63 @@ export default function UsersPage() {
               </tr>
             </thead>
             <tbody>
-              {list.map((u) => (
-                <tr key={u.id}>
-                  <td>
-                    <span className="cell-user">
-                      <Avatar name={u.name} color={u.avatarColor} />
-                      <div>
-                        <div className="nm">{u.name}</div>
-                        <div className="sm">{u.email}</div>
-                      </div>
-                    </span>
+              {members.map((m) => {
+                const name = memberName(m);
+                const manager = m.reportsToUserId ? memberById.get(m.reportsToUserId) : undefined;
+                const status = statusLabel(m);
+                return (
+                  <tr key={m.id}>
+                    <td>
+                      <span className="cell-user">
+                        <Avatar name={name} color={avatarColorFor(m.id)} />
+                        <div>
+                          <div className="nm">{name}</div>
+                          <div className="sm">{m.email}</div>
+                        </div>
+                      </span>
+                    </td>
+                    <td>
+                      {m.role?.name ? (
+                        <Pill tone="blue">{m.role.name}</Pill>
+                      ) : (
+                        <span className="subtle">—</span>
+                      )}
+                    </td>
+                    <td>{companyName ?? <span className="subtle">—</span>}</td>
+                    <td>
+                      {manager ? (
+                        memberName(manager)
+                      ) : (
+                        <span className="subtle">—</span>
+                      )}
+                    </td>
+                    <td className="muted">{m.createdAt ? formatDate(m.createdAt) : '—'}</td>
+                    <td>
+                      {status ? (
+                        <Pill tone={status === 'active' ? 'green' : 'grey'}>{status}</Pill>
+                      ) : (
+                        <span className="subtle">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              {members.length === 0 && (
+                <tr>
+                  <td colSpan={6}>
+                    <div className="empty">No members to show for your role yet.</div>
                   </td>
-                  <td><Pill tone={roleTone[u.role]}>{roleLabels[u.role]}</Pill></td>
-                  <td>{companyMap.get(u.companyId)?.name ?? u.companyId}</td>
-                  <td>{u.teamId ? teamMap.get(u.teamId)?.name ?? u.teamId : <span className="subtle">—</span>}</td>
-                  <td className="muted">{formatDate(u.createdAt)}</td>
-                  <td><Pill tone={u.active ? 'green' : 'grey'}>{u.active ? 'Active' : 'Inactive'}</Pill></td>
                 </tr>
-              ))}
-              {list.length === 0 && (
-                <tr><td colSpan={6}><div className="empty">No managed users yet — add one above.</div></td></tr>
               )}
             </tbody>
           </table>
         </div>
       </div>
-
-      {showModal && (
-        <AddUserModal
-          companies={companies.data}
-          teams={teams.data}
-          onAdd={handleAdd}
-          onClose={() => setShowModal(false)}
-        />
-      )}
     </>
   );
 }
 
-// ---- Add User modal ----
+// ---- Add User modal (kept for later invite wiring; not invoked) ----
 type FormState = {
   name: string;
   email: string;
@@ -117,7 +265,13 @@ type FormState = {
   teamId: string;
 };
 
-function AddUserModal({
+const roleLabels: Record<ManagedUser['role'], string> = {
+  CompanyAdmin: 'Company Admin',
+  TeamManager: 'Team Manager',
+};
+
+/** @deprecated Seed-backed modal retained until Abel invite exists. Not mounted. */
+export function AddUserModal({
   companies,
   teams,
   onAdd,
@@ -161,16 +315,18 @@ function AddUserModal({
     if (!validate()) return;
     setSaving(true);
     try {
-      const user = await db.addManagedUser({
+      // Intentionally does not call seedDataService — invite API not available.
+      onAdd({
+        id: 'pending',
         name: form.name.trim(),
         email: form.email.trim(),
         role: form.role,
         companyId: form.companyId,
         teamId: form.role === 'TeamManager' ? form.teamId || undefined : undefined,
         avatarColor: '#1f6feb',
+        createdAt: new Date().toISOString(),
         active: true,
       });
-      onAdd(user);
     } finally {
       setSaving(false);
     }
@@ -183,7 +339,6 @@ function AddUserModal({
         style={{ width: 'min(540px, 94vw)', padding: 0 }}
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
         <div className="drawer-bar">
           <button className="btn ghost sm" onClick={onClose}><X size={16} /></button>
           <strong style={{ fontSize: 15 }}>Add user</strong>
@@ -192,12 +347,9 @@ function AddUserModal({
 
         <form onSubmit={handleSubmit} style={{ padding: 24 }}>
           <p className="muted" style={{ margin: '0 0 20px', fontSize: 13 }}>
-            Assign a Company Admin or Team Manager to a company or team. They will be
-            able to view their team's activity — they cannot access revenue, invoices or
-            platform settings.
+            Invite is not available yet. This form is retained for a future Abel invite API.
           </p>
 
-          {/* Role */}
           <div className="field">
             <label className="field-label">Role</label>
             <div className="wrap-gap" style={{ marginTop: 6 }}>
@@ -212,22 +364,15 @@ function AddUserModal({
                 </button>
               ))}
             </div>
-            <div style={{ marginTop: 8, fontSize: 12.5, color: 'var(--text-muted)' }}>
-              {form.role === 'CompanyAdmin'
-                ? 'Can see all advisors and teams within their company.'
-                : 'Can see only the advisors in their assigned team.'}
-            </div>
           </div>
 
           <div style={{ height: 16 }} />
 
-          {/* Name */}
           <div className="field">
-            <label className="field-label">Full name <span style={{ color: 'var(--red)' }}>*</span></label>
+            <label className="field-label">Full name</label>
             <input
               className="input"
               style={{ width: '100%', marginTop: 5 }}
-              placeholder="e.g. Pieter van Wyk"
               value={form.name}
               onChange={(e) => set('name', e.target.value)}
             />
@@ -236,14 +381,12 @@ function AddUserModal({
 
           <div style={{ height: 12 }} />
 
-          {/* Email */}
           <div className="field">
-            <label className="field-label">Email address <span style={{ color: 'var(--red)' }}>*</span></label>
+            <label className="field-label">Email address</label>
             <input
               className="input"
               type="email"
               style={{ width: '100%', marginTop: 5 }}
-              placeholder="e.g. pieter@company.co.za"
               value={form.email}
               onChange={(e) => set('email', e.target.value)}
             />
@@ -252,9 +395,8 @@ function AddUserModal({
 
           <div style={{ height: 12 }} />
 
-          {/* Company */}
           <div className="field">
-            <label className="field-label">Company <span style={{ color: 'var(--red)' }}>*</span></label>
+            <label className="field-label">Company</label>
             <select
               className="input"
               style={{ width: '100%', marginTop: 5 }}
@@ -267,12 +409,11 @@ function AddUserModal({
             {errors.companyId && <div className="field-error">{errors.companyId}</div>}
           </div>
 
-          {/* Team — only for TeamManager */}
           {form.role === 'TeamManager' && (
             <>
               <div style={{ height: 12 }} />
               <div className="field">
-                <label className="field-label">Team <span style={{ color: 'var(--red)' }}>*</span></label>
+                <label className="field-label">Team</label>
                 <select
                   className="input"
                   style={{ width: '100%', marginTop: 5 }}
@@ -284,11 +425,6 @@ function AddUserModal({
                   {filteredTeams.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
                 {errors.teamId && <div className="field-error">{errors.teamId}</div>}
-                {form.companyId && filteredTeams.length === 0 && (
-                  <div style={{ fontSize: 12.5, color: 'var(--amber)', marginTop: 5 }}>
-                    No teams exist for this company yet.
-                  </div>
-                )}
               </div>
             </>
           )}
@@ -296,8 +432,8 @@ function AddUserModal({
           <div style={{ height: 24 }} />
           <div className="row between">
             <button type="button" className="btn" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn primary" disabled={saving}>
-              <UserPlus size={16} /> {saving ? 'Adding…' : 'Add user'}
+            <button type="submit" className="btn primary" disabled>
+              <UserPlus size={16} /> {saving ? 'Adding…' : 'Add user (unavailable)'}
             </button>
           </div>
         </form>
