@@ -1,44 +1,104 @@
 import { ShieldCheck, Check, Lock, Database, Server } from 'lucide-react';
-import { seedDataService as db } from '../data/seedDataService';
+import { ApiError, API_BASE_URL } from '../api/apiClient';
+import {
+  getCompanyMe,
+  getCompanyMembers,
+  getCompanyPermissions,
+  getCompanyRoles,
+  type CompanyMember,
+  type CompanyMe,
+  type CompanyPermission,
+  type CompanyRoleDetail,
+} from '../api/companyApi';
 import { useAsync } from '../lib/useAsync';
 import { Avatar, Pill, SkeletonRows, PageIntro } from '../components/ui';
-import type { Role } from '../domain/types';
 
-const roleMatrix: { capability: string; roles: Record<Role, boolean> }[] = [
-  { capability: 'View own activity & targets', roles: { SuperAdmin: true, CompanyAdmin: true, TeamManager: true, Advisor: true } },
-  { capability: 'View team members', roles: { SuperAdmin: true, CompanyAdmin: true, TeamManager: true, Advisor: false } },
-  { capability: 'View whole company', roles: { SuperAdmin: true, CompanyAdmin: true, TeamManager: false, Advisor: false } },
-  { capability: 'Manage company licenses', roles: { SuperAdmin: true, CompanyAdmin: true, TeamManager: false, Advisor: false } },
-  { capability: 'Issue invoices', roles: { SuperAdmin: true, CompanyAdmin: false, TeamManager: false, Advisor: false } },
-  { capability: 'Handle support tickets', roles: { SuperAdmin: true, CompanyAdmin: false, TeamManager: false, Advisor: false } },
-  { capability: 'View all companies & platform revenue', roles: { SuperAdmin: true, CompanyAdmin: false, TeamManager: false, Advisor: false } },
-  { capability: 'Manage roles & permissions', roles: { SuperAdmin: true, CompanyAdmin: false, TeamManager: false, Advisor: false } },
-];
+const AVATAR_COLORS = ['#1f6feb', '#8957e5', '#2da44e', '#bf8700', '#cf222e', '#0969da', '#1a7f37'];
 
-const roleOrder: Role[] = ['SuperAdmin', 'CompanyAdmin', 'TeamManager', 'Advisor'];
-const roleLabels: Record<Role, string> = {
-  SuperAdmin: 'Super Admin',
-  CompanyAdmin: 'Company Admin',
-  TeamManager: 'Team Manager',
-  Advisor: 'Advisor',
+function memberName(m: CompanyMember): string {
+  return `${m.firstName ?? ''} ${m.lastName ?? ''}`.trim() || m.email;
+}
+
+function avatarColorFor(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash + id.charCodeAt(i) * (i + 1)) % 997;
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
+
+function permissionLabel(p: CompanyPermission): string {
+  return p.label?.trim() || p.key.replace(/_/g, ' ');
+}
+
+function isLocalBackend(): boolean {
+  try {
+    const host = new URL(API_BASE_URL).hostname;
+    return host === 'localhost' || host === '127.0.0.1';
+  } catch {
+    return true;
+  }
+}
+
+type SettingsPageData = {
+  me: CompanyMe;
+  members: CompanyMember[];
+  roles: CompanyRoleDetail[];
+  permissions: CompanyPermission[];
 };
 
+async function loadSettingsPage(): Promise<SettingsPageData> {
+  const [me, members, roles, permissions] = await Promise.all([
+    getCompanyMe(),
+    getCompanyMembers(),
+    getCompanyRoles(),
+    getCompanyPermissions(),
+  ]);
+  return { me, members, roles, permissions };
+}
+
 export default function SettingsPage() {
-  const usersA = useAsync(() => db.getUsers());
-  if (!usersA.data) return <SkeletonRows rows={4} cols={3} />;
+  const loaded = useAsync(() => loadSettingsPage());
+
+  if (loaded.loading && !loaded.data) {
+    return <SkeletonRows rows={4} cols={3} />;
+  }
+
+  if (loaded.error && !loaded.data) {
+    const message =
+      loaded.error instanceof ApiError
+        ? loaded.error.message
+        : 'Unable to load settings. Please try again.';
+    return (
+      <>
+        <PageIntro>
+          Company access, roles, and permissions for your organisation.
+        </PageIntro>
+        <div className="card">
+          <div className="empty" style={{ color: 'var(--red)' }}>
+            {message}
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  const me = loaded.data!.me;
+  const members = loaded.data!.members;
+  const roles = loaded.data!.roles;
+  const permissions = loaded.data!.permissions;
+  const companyName = me.company?.name ?? '—';
+  const envLabel = isLocalBackend() ? 'Local development' : 'Connected API';
 
   return (
     <>
       <PageIntro>
-        v1 is internal — you, Johan and Abel all have full Super Admin access. The role tiers below
-        are already modelled so company/team permissions can switch on when corporate clients arrive.
+        Company access, roles, and permissions for your organisation. This view is read-only.
       </PageIntro>
 
       <div className="grid grid-2">
         <div className="card">
           <div className="card-head">
             <h3>Team members</h3>
-            <span className="hint">Creation team · full access</span>
+            <span className="hint">Company members in your access scope</span>
           </div>
           <div className="table-wrap">
             <table className="data">
@@ -46,18 +106,39 @@ export default function SettingsPage() {
                 <tr><th>Member</th><th>Email</th><th>Role</th></tr>
               </thead>
               <tbody>
-                {usersA.data.map((u) => (
-                  <tr key={u.id}>
-                    <td>
-                      <span className="cell-user">
-                        <Avatar name={u.name} color={u.avatarColor} />
-                        <span className="nm">{u.name}{u.isFounder && <span className="subtle" style={{ fontWeight: 400 }}> · Founder</span>}</span>
-                      </span>
+                {members.map((m) => {
+                  const name = memberName(m);
+                  return (
+                    <tr key={m.id}>
+                      <td>
+                        <span className="cell-user">
+                          <Avatar name={name} color={avatarColorFor(m.id)} />
+                          <span className="nm" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                            {name}
+                            {m.isPlatformAdmin ? (
+                              <Pill tone="purple">Platform Admin</Pill>
+                            ) : null}
+                          </span>
+                        </span>
+                      </td>
+                      <td className="muted">{m.email}</td>
+                      <td>
+                        {m.role?.name ? (
+                          <Pill tone="blue"><ShieldCheck size={12} /> {m.role.name}</Pill>
+                        ) : (
+                          <span className="subtle">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+                {members.length === 0 && (
+                  <tr>
+                    <td colSpan={3}>
+                      <div className="empty">No members to show for your role yet.</div>
                     </td>
-                    <td className="muted">{u.email}</td>
-                    <td><Pill tone="purple"><ShieldCheck size={12} /> {roleLabels[u.role]}</Pill></td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
@@ -70,31 +151,34 @@ export default function SettingsPage() {
           </div>
           <div className="card-pad stack" style={{ gap: 14 }}>
             <div className="row" style={{ gap: 12 }}>
-              <span className="stat-top icon" style={{ background: 'var(--amber-soft)', color: 'var(--amber)', width: 34, height: 34, borderRadius: 9, display: 'grid', placeItems: 'center' }}>
-                <Database size={18} />
-              </span>
-              <div className="stack" style={{ gap: 1 }}>
-                <strong>Seed data (local)</strong>
-                <span className="muted" style={{ fontSize: 12.5 }}>Currently active · in-memory demo data</span>
-              </div>
-              <div style={{ flex: 1 }} />
-              <Pill tone="amber">Active</Pill>
-            </div>
-            <div className="row" style={{ gap: 12, opacity: 0.6 }}>
-              <span className="icon" style={{ background: 'var(--brand-soft)', color: 'var(--brand)', width: 34, height: 34, borderRadius: 9, display: 'grid', placeItems: 'center' }}>
+              <span className="stat-top icon" style={{ background: 'var(--brand-soft)', color: 'var(--brand)', width: 34, height: 34, borderRadius: 9, display: 'grid', placeItems: 'center' }}>
                 <Server size={18} />
               </span>
               <div className="stack" style={{ gap: 1 }}>
-                <strong>AWS API (PostgreSQL)</strong>
-                <span className="muted" style={{ fontSize: 12.5 }}>Swap in via the DataService interface when Abel ships it</span>
+                <strong>Abel API</strong>
+                <span className="muted" style={{ fontSize: 12.5 }}>Company roles and permissions</span>
               </div>
               <div style={{ flex: 1 }} />
-              <Pill tone="grey">Pending</Pill>
+              <Pill tone="green">Active</Pill>
             </div>
-            <p className="subtle" style={{ fontSize: 12.5, margin: 0 }}>
-              All pages read through a single <code>DataService</code> seam — connecting the real backend
-              is a one-file change with no UI rework.
-            </p>
+            <div className="row" style={{ gap: 12 }}>
+              <span className="icon" style={{ background: 'var(--green-soft)', color: 'var(--green)', width: 34, height: 34, borderRadius: 9, display: 'grid', placeItems: 'center' }}>
+                <Database size={18} />
+              </span>
+              <div className="stack" style={{ gap: 1 }}>
+                <strong>Environment</strong>
+                <span className="muted" style={{ fontSize: 12.5 }}>{envLabel}</span>
+              </div>
+            </div>
+            <div className="row" style={{ gap: 12 }}>
+              <span className="icon" style={{ background: 'var(--purple-soft)', color: 'var(--purple)', width: 34, height: 34, borderRadius: 9, display: 'grid', placeItems: 'center' }}>
+                <ShieldCheck size={18} />
+              </span>
+              <div className="stack" style={{ gap: 1 }}>
+                <strong>Company</strong>
+                <span className="muted" style={{ fontSize: 12.5 }}>{companyName}</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -102,35 +186,53 @@ export default function SettingsPage() {
       <div className="card" style={{ marginTop: 16 }}>
         <div className="card-head">
           <h3>Permission matrix</h3>
-          <span className="hint"><Lock size={13} /> Roadmap for company/team tiers</span>
+          <span className="hint"><Lock size={13} /> Real company roles × permission keys</span>
         </div>
         <div className="table-wrap">
-          <table className="data">
-            <thead>
-              <tr>
-                <th>Capability</th>
-                {roleOrder.map((r) => (
-                  <th key={r} style={{ textAlign: 'center' }}>{roleLabels[r]}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {roleMatrix.map((row) => (
-                <tr key={row.capability}>
-                  <td style={{ fontWeight: 500 }}>{row.capability}</td>
-                  {roleOrder.map((r) => (
-                    <td key={r} style={{ textAlign: 'center' }}>
-                      {row.roles[r] ? (
-                        <Check size={16} color="var(--green)" />
-                      ) : (
-                        <span className="subtle">—</span>
-                      )}
-                    </td>
+          {roles.length === 0 || permissions.length === 0 ? (
+            <div className="empty">No roles or permissions available for this company yet.</div>
+          ) : (
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>Capability</th>
+                  {roles.map((r) => (
+                    <th key={r.id} style={{ textAlign: 'center' }}>{r.name}</th>
                   ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {permissions.map((p) => (
+                  <tr key={p.key}>
+                    <td style={{ fontWeight: 500 }}>
+                      <div>{permissionLabel(p)}</div>
+                      {p.description ? (
+                        <div className="subtle" style={{ fontWeight: 400, fontSize: 12, marginTop: 2 }}>
+                          {p.description}
+                        </div>
+                      ) : (
+                        <div className="subtle" style={{ fontWeight: 400, fontSize: 12, marginTop: 2 }}>
+                          {p.key}
+                        </div>
+                      )}
+                    </td>
+                    {roles.map((r) => {
+                      const has = (r.permissions ?? []).includes(p.key);
+                      return (
+                        <td key={r.id} style={{ textAlign: 'center' }}>
+                          {has ? (
+                            <Check size={16} color="var(--green)" />
+                          ) : (
+                            <span className="subtle">—</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </>

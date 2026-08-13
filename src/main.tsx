@@ -7,14 +7,33 @@ import { useAuth } from './lib/useAuth';
 import './styles/global.css';
 
 function Root() {
-  const { authed, attempt } = useAuth();
+  const { status, authed, login } = useAuth();
   const location = useLocation();
+
+  // Team Pipeline demo stays isolated from real Abel auth.
   if (location.pathname.startsWith('/team-pipeline-demo')) {
+    return <App />;
+  }
+
+  if (status === 'booting') {
     return (
-      <App />
+      <div
+        style={{
+          minHeight: '100vh',
+          background: '#0d1117',
+          display: 'grid',
+          placeItems: 'center',
+          color: '#768390',
+          fontFamily: 'inherit',
+          fontSize: 14,
+        }}
+      >
+        Checking session…
+      </div>
     );
   }
-  if (!authed) return <LoginPage onAttempt={attempt} />;
+
+  if (!authed) return <LoginPage onLogin={login} />;
   return <App />;
 }
 

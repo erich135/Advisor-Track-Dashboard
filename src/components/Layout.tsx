@@ -90,7 +90,7 @@ const titles: Record<string, { title: string; sub: string }> = {
 export default function Layout({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
-  const { signOut } = useAuth();
+  const { signOut, session } = useAuth();
   const { selectedDemoUser, resetDemoUser } = useDemoSession();
   const isDemoRoute = pathname.startsWith('/team-pipeline-demo');
   const matchKey =
@@ -107,9 +107,16 @@ export default function Layout({ children }: { children: ReactNode }) {
   }
 
   const me = users[0];
-  const profile = isDemoRoute ? selectedDemoUser! : me;
-  const profileRole = isDemoRoute ? selectedDemoUser!.role : 'Super Admin · Founder';
-  const profileSub = isDemoRoute ? selectedDemoUser!.scopeLabel : 'Super Admin · Founder';
+  const sessionName = session
+    ? `${session.user.firstName ?? ''} ${session.user.lastName ?? ''}`.trim() || session.user.email
+    : me.name;
+  const sessionRole =
+    session?.role?.name ||
+    (session?.isPlatformAdmin ? 'Platform admin' : null) ||
+    'AdvisorTrack user';
+  const profile = isDemoRoute ? selectedDemoUser! : { ...me, name: sessionName };
+  const profileRole = isDemoRoute ? selectedDemoUser!.role : sessionRole;
+  const profileSub = isDemoRoute ? selectedDemoUser!.scopeLabel : session?.organisation?.name || sessionRole;
   const isFounderDemo = isDemoRoute && selectedDemoUser?.role === 'Founder/Admin';
   const profileAvatarColor = isDemoRoute ? (isFounderDemo ? '#8b5cf6' : '#1f6feb') : me.avatarColor;
   const demoNav: NavEntry[] = isFounderDemo

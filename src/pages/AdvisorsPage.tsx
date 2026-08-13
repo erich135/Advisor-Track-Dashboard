@@ -1,46 +1,84 @@
 import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import { Search, UserPlus } from 'lucide-react';
-import { seedDataService as db } from '../data/seedDataService';
+import { ApiError } from '../api/apiClient';
+import { getCompanyMembers, type CompanyMember } from '../api/companyApi';
 import { useAsync } from '../lib/useAsync';
-import { Avatar, Pill, Progress, SkeletonRows, PageIntro } from '../components/ui';
-import { formatZAR, formatPercent, formatDate } from '../lib/format';
-import { advisorPerformance } from '../lib/analytics';
+import { useAuth } from '../lib/useAuth';
+import { Avatar, Pill, SkeletonRows, PageIntro } from '../components/ui';
+import { formatDate } from '../lib/format';
+
+const AVATAR_COLORS = ['#1f6feb', '#8957e5', '#2da44e', '#bf8700', '#cf222e', '#0969da', '#1a7f37'];
+
+function memberName(m: CompanyMember): string {
+  return `${m.firstName ?? ''} ${m.lastName ?? ''}`.trim() || m.email;
+}
+
+function avatarColorFor(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash + id.charCodeAt(i) * (i + 1)) % 997;
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
+
+/** Subscription status is the closest Abel field to the old Active/Inactive column. */
+function isSubscriptionActive(m: CompanyMember): boolean {
+  return m.subscription?.status === 'active';
+}
 
 export default function AdvisorsPage() {
-  const advisors = useAsync(() => db.getAdvisors());
-  const cases = useAsync(() => db.getProductionCases());
-  const activity = useAsync(() => db.getWeeklyActivity());
-  const companies = useAsync(() => db.getCompanies());
+  const { session } = useAuth();
+  const members = useAsync(() => getCompanyMembers());
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
-  const companyName = useMemo(() => {
-    const m = new Map<string, string>();
-    companies.data?.forEach((c) => m.set(c.id, c.name));
-    return m;
-  }, [companies.data]);
+  const companyLabel = session?.company?.name || session?.organisation?.name || null;
 
-  if (!advisors.data || !cases.data || !activity.data) {
+  const rows = useMemo(() => {
+    const list = members.data ?? [];
+    const q = query.trim().toLowerCase();
+    return list
+      .filter((m) => {
+        if (filter === 'all') return true;
+        const active = isSubscriptionActive(m);
+        return filter === 'active' ? active : !active;
+      })
+      .filter((m) => {
+        if (!q) return true;
+        const hay = [memberName(m), m.email, m.role?.name ?? '', m.subscription?.name ?? '']
+          .join(' ')
+          .toLowerCase();
+        return hay.includes(q);
+      });
+  }, [members.data, query, filter]);
+
+  if (members.loading && !members.data) {
     return <SkeletonRows rows={8} cols={5} />;
   }
 
-  const perf = advisorPerformance(advisors.data, cases.data, activity.data);
-  const perfById = new Map(perf.map((p) => [p.advisor.id, p]));
-
-  const rows = advisors.data
-    .filter((a) => (filter === 'all' ? true : filter === 'active' ? a.active : !a.active))
-    .filter(
-      (a) =>
-        a.name.toLowerCase().includes(query.toLowerCase()) ||
-        a.city.toLowerCase().includes(query.toLowerCase()) ||
-        a.email.toLowerCase().includes(query.toLowerCase()),
+  if (members.error && !members.data) {
+    const message =
+      members.error instanceof ApiError
+        ? members.error.message
+        : 'Unable to load advisors. Please try again.';
+    return (
+      <>
+        <PageIntro>
+          Every advisor on the platform.
+        </PageIntro>
+        <div className="card">
+          <div className="empty" style={{ color: 'var(--red)' }}>
+            {message}
+          </div>
+        </div>
+      </>
     );
+  }
+
+  const allMembers = members.data ?? [];
 
   return (
     <>
       <PageIntro>
-        Every advisor on the platform. Click through for their pipeline, targets and production.
+        Every advisor on the platform.
       </PageIntro>
 
       <div className="row between" style={{ marginBottom: 16 }}>
@@ -54,7 +92,7 @@ export default function AdvisorsPage() {
             />
           </div>
           <select className="input" value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}>
-            <option value="all">All ({advisors.data.length})</option>
+            <option value="all">All ({allMembers.length})</option>
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
           </select>
@@ -79,42 +117,53 @@ export default function AdvisorsPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((a) => {
-                const p = perfById.get(a.id);
+              {rows.map((m) => {
+                const name = memberName(m);
+                const active = isSubscriptionActive(m);
                 return (
-                  <tr key={a.id} className="row-link">
+                  <tr key={m.id}>
                     <td>
-                      <Link to={`/advisors/${a.id}`} className="cell-user">
-                        <Avatar name={a.name} color={a.avatarColor} />
+                      <div className="cell-user">
+                        <Avatar name={name} color={avatarColorFor(m.id)} />
                         <div>
-                          <div className="nm">{a.name}</div>
-                          <div className="sm">{a.email}</div>
+                          <div className="nm">{name}</div>
+                          <div className="sm">{m.email}</div>
                         </div>
-                      </Link>
+                      </div>
                     </td>
-                    <td>{a.companyId ? companyName.get(a.companyId) ?? '—' : <span className="subtle">Individual</span>}</td>
-                    <td className="muted">{formatDate(a.joinedAt)}</td>
-                    <td className="num">{p?.weekPoints ?? '—'}</td>
-                    <td className="num">{p ? formatZAR(p.issuedCommission) : '—'}</td>
                     <td>
-                      {p ? (
-                        <div className="row" style={{ gap: 8 }}>
-                          <Progress value={p.attainment * 100} color={p.attainment >= 1 ? 'var(--green)' : undefined} />
-                          <span className="subtle" style={{ minWidth: 36, textAlign: 'right' }}>
-                            {formatPercent(p.attainment)}
-                          </span>
-                        </div>
+                      {companyLabel ? (
+                        companyLabel
                       ) : (
-                        '—'
+                        <span className="subtle">—</span>
                       )}
                     </td>
+                    <td className="muted">{m.createdAt ? formatDate(m.createdAt) : '—'}</td>
+                    <td className="num">—</td>
+                    <td className="num">—</td>
+                    <td>—</td>
                     <td>
-                      {a.active ? <Pill tone="green">Active</Pill> : <Pill tone="grey">Inactive</Pill>}
+                      {m.subscription ? (
+                        active ? (
+                          <Pill tone="green">Active</Pill>
+                        ) : (
+                          <Pill tone="grey">{m.subscription.status || 'Inactive'}</Pill>
+                        )
+                      ) : (
+                        <span className="subtle">—</span>
+                      )}
                     </td>
                   </tr>
                 );
               })}
-              {rows.length === 0 && (
+              {allMembers.length === 0 && (
+                <tr>
+                  <td colSpan={7}>
+                    <div className="empty">No advisors to show for your role yet.</div>
+                  </td>
+                </tr>
+              )}
+              {allMembers.length > 0 && rows.length === 0 && (
                 <tr>
                   <td colSpan={7}>
                     <div className="empty">No advisors match your search.</div>
