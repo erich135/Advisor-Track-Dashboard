@@ -14,7 +14,7 @@ import { Avatar, Pill, SkeletonRows, PageIntro, StatCard } from '../components/u
 import { formatDate } from '../lib/format';
 import type { ManagedUser } from '../domain/types';
 
-const AVATAR_COLORS = ['#1f6feb', '#8957e5', '#2da44e', '#bf8700', '#cf222e', '#0969da', '#1a7f37'];
+const AVATAR_COLORS = ['#0E51E4', '#8957e5', '#2da44e', '#bf8700', '#cf222e', '#020921', '#1a7f37'];
 
 function memberName(m: CompanyMember): string {
   return `${m.firstName ?? ''} ${m.lastName ?? ''}`.trim() || m.email;
@@ -323,7 +323,7 @@ export function AddUserModal({
         role: form.role,
         companyId: form.companyId,
         teamId: form.role === 'TeamManager' ? form.teamId || undefined : undefined,
-        avatarColor: '#1f6feb',
+        avatarColor: '#0E51E4',
         createdAt: new Date().toISOString(),
         active: true,
       });

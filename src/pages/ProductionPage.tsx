@@ -75,7 +75,7 @@ export default function ProductionPage() {
               <Tooltip formatter={(v: number) => formatZAR(v)} contentStyle={{ borderRadius: 10, border: '1px solid var(--border)', fontSize: 13 }} />
               <Legend wrapperStyle={{ fontSize: 13 }} />
               <Bar dataKey="issued" name="Issued" stackId="a" fill="#1a7f37" radius={[0, 0, 0, 0]} />
-              <Bar dataKey="pipeline" name="Pipeline" stackId="a" fill="#9bbcf0" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="pipeline" name="Pipeline" stackId="a" fill="#0E51E4" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

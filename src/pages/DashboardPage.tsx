@@ -19,11 +19,10 @@ import {
   TrendingUp,
   Wallet,
   ArrowUpRight,
-  LifeBuoy,
 } from 'lucide-react';
 import { seedDataService as db } from '../data/seedDataService';
 import { useAsync } from '../lib/useAsync';
-import { Avatar, Pill, Progress, StatCard, SkeletonRows } from '../components/ui';
+import { Avatar, Progress, StatCard, SkeletonRows } from '../components/ui';
 import { formatZAR, formatNumber, formatPercent } from '../lib/format';
 import {
   mrr,
@@ -37,16 +36,15 @@ import {
   revenueByPlan,
 } from '../lib/analytics';
 
-const PIE_COLORS = ['#1f6feb', '#8250df'];
+const PIE_COLORS = ['#0E51E4', '#8250df'];
 
 export default function DashboardPage() {
   const advisors = useAsync(() => db.getAdvisors());
   const subs = useAsync(() => db.getSubscriptions());
   const cases = useAsync(() => db.getProductionCases());
   const activity = useAsync(() => db.getWeeklyActivity());
-  const tickets = useAsync(() => db.getSupportTickets());
 
-  if (!advisors.data || !subs.data || !cases.data || !activity.data || !tickets.data) {
+  if (!advisors.data || !subs.data || !cases.data || !activity.data) {
     return <SkeletonRows rows={6} cols={4} />;
   }
 
@@ -59,7 +57,6 @@ export default function DashboardPage() {
   const perf = advisorPerformance(advisors.data, cases.data, activity.data);
   const trend = weeklyTrend(activity.data);
   const planSplit = revenueByPlan(subs.data);
-  const openTickets = tickets.data.filter((t) => t.status !== 'resolved');
 
   const topPerformers = perf.slice(0, 5);
 
@@ -111,15 +108,15 @@ export default function DashboardPage() {
               <AreaChart data={trend} margin={{ top: 8, right: 12, left: -8, bottom: 0 }}>
                 <defs>
                   <linearGradient id="gPoints" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#1f6feb" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="#1f6feb" stopOpacity={0} />
+                    <stop offset="0%" stopColor="#0E51E4" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="#0E51E4" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--border-muted)" vertical={false} />
                 <XAxis dataKey="week" tick={{ fontSize: 12, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 12, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
                 <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid var(--border)', fontSize: 13 }} />
-                <Area type="monotone" dataKey="points" name="Activity points" stroke="#1f6feb" strokeWidth={2} fill="url(#gPoints)" />
+                <Area type="monotone" dataKey="points" name="Activity points" stroke="#0E51E4" strokeWidth={2} fill="url(#gPoints)" />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -156,8 +153,8 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-3" style={{ marginTop: 16 }}>
-        <div className="card" style={{ gridColumn: 'span 2' }}>
+      <div style={{ marginTop: 16 }}>
+        <div className="card">
           <div className="card-head">
             <h3>Top performers</h3>
             <Link to="/advisors" className="btn ghost sm">
@@ -208,34 +205,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div className="card">
-          <div className="card-head">
-            <h3>Open queries</h3>
-            <Link to="/support" className="btn ghost sm">
-              <LifeBuoy size={14} /> Inbox
-            </Link>
-          </div>
-          <div className="stack" style={{ padding: 12, gap: 10 }}>
-            {openTickets.slice(0, 4).map((t) => (
-              <Link
-                to="/support"
-                key={t.id}
-                className="card-pad"
-                style={{ border: '1px solid var(--border-muted)', borderRadius: 10, display: 'block' }}
-              >
-                <div className="row between" style={{ marginBottom: 4 }}>
-                  <span className="subtle" style={{ fontSize: 12 }}>{t.reference}</span>
-                  <Pill tone={t.priority === 'high' ? 'red' : t.priority === 'medium' ? 'amber' : 'grey'}>
-                    {t.priority}
-                  </Pill>
-                </div>
-                <div style={{ fontWeight: 600, fontSize: 13.5 }}>{t.subject}</div>
-                <div className="sm muted" style={{ fontSize: 12 }}>{t.requesterName}</div>
-              </Link>
-            ))}
-            {openTickets.length === 0 && <div className="empty">No open queries 🎉</div>}
-          </div>
-        </div>
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>

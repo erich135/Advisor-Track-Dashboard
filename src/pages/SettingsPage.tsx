@@ -13,7 +13,7 @@ import {
 import { useAsync } from '../lib/useAsync';
 import { Avatar, Pill, SkeletonRows, PageIntro } from '../components/ui';
 
-const AVATAR_COLORS = ['#1f6feb', '#8957e5', '#2da44e', '#bf8700', '#cf222e', '#0969da', '#1a7f37'];
+const AVATAR_COLORS = ['#0E51E4', '#8957e5', '#2da44e', '#bf8700', '#cf222e', '#020921', '#1a7f37'];
 
 function memberName(m: CompanyMember): string {
   return `${m.firstName ?? ''} ${m.lastName ?? ''}`.trim() || m.email;
@@ -204,7 +204,7 @@ export default function SettingsPage() {
               <tbody>
                 {permissions.map((p) => (
                   <tr key={p.key}>
-                    <td style={{ fontWeight: 500 }}>
+                    <td style={{ fontWeight: 600 }}>
                       <div>{permissionLabel(p)}</div>
                       {p.description ? (
                         <div className="subtle" style={{ fontWeight: 400, fontSize: 12, marginTop: 2 }}>

@@ -17,7 +17,7 @@ import type {
 } from '../domain/types';
 import { PIPELINE_ORDER } from '../domain/calculations';
 
-const COLORS = ['#1f6feb', '#8957e5', '#2da44e', '#bf8700', '#cf222e', '#0969da', '#1a7f37'];
+const COLORS = ['#0E51E4', '#8957e5', '#2da44e', '#bf8700', '#cf222e', '#020921', '#1a7f37'];
 const color = (i: number) => COLORS[i % COLORS.length];
 
 function isoDaysAgo(days: number): string {

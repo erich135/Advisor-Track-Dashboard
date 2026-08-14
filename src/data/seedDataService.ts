@@ -24,7 +24,7 @@ const delay = <T>(value: T, ms = 120): Promise<T> =>
 let managedUsers: ManagedUser[] = [...seedManagedUsers];
 let nextId = managedUsers.length + 1;
 
-const COLORS = ['#1f6feb', '#8957e5', '#2da44e', '#bf8700', '#cf222e', '#0969da', '#1a7f37'];
+const COLORS = ['#0E51E4', '#8957e5', '#2da44e', '#bf8700', '#cf222e', '#020921', '#1a7f37'];
 
 export const seedDataService: DataService = {
   getCurrentUser: () => delay(users[0]),

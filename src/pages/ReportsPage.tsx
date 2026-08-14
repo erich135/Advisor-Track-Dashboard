@@ -20,7 +20,7 @@ import { StatCard, SkeletonRows, Pill } from '../components/ui';
 import { formatZAR, formatNumber, formatPercent } from '../lib/format';
 import { mrr, arr, activeSubscribers, trialCount } from '../lib/analytics';
 
-const PIE_COLORS = ['#1f6feb', '#8250df', '#1a7f37', '#bf8700'];
+const PIE_COLORS = ['#0E51E4', '#8250df', '#1a7f37', '#bf8700'];
 
 export default function ReportsPage() {
   const subs = useAsync(() => db.getSubscriptions());
@@ -82,13 +82,13 @@ export default function ReportsPage() {
   return (
     <>
       {/* Founders-only banner */}
-      <div className="card card-pad row" style={{ marginBottom: 20, background: 'linear-gradient(135deg, #0d1117 0%, #161b22 100%)', border: '1px solid #21262d', color: '#c9d1d9', gap: 12 }}>
+      <div className="card card-pad row" style={{ marginBottom: 20, background: 'var(--navy)', border: '1px solid var(--navy)', color: 'var(--text-on-dark)', gap: 12 }}>
         <span style={{ background: '#bf8700', borderRadius: 8, width: 34, height: 34, display: 'grid', placeItems: 'center', flexShrink: 0 }}>
           <Lock size={17} color="#fff" />
         </span>
         <div>
-          <div style={{ fontWeight: 650, color: '#fff', fontSize: 14 }}>Founders-only view</div>
-          <div style={{ fontSize: 12.5, color: '#768390', marginTop: 1 }}>
+          <div style={{ fontWeight: 800, color: '#fff', fontSize: 14 }}>Founders-only view</div>
+          <div style={{ fontSize: 12.5, color: 'rgba(255, 255, 255, 0.68)', marginTop: 1 }}>
             Revenue, growth and conversion data visible only to Erich, Johan & Abel.
           </div>
         </div>
@@ -172,7 +172,7 @@ export default function ReportsPage() {
                 <YAxis tick={{ fontSize: 12, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
                 <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid var(--border)', fontSize: 13 }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="newSubs" name="New subs" fill="#1f6feb" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="newSubs" name="New subs" fill="#0E51E4" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="trialConversions" name="Trial → paid" fill="#8250df" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="churned" name="Churned" fill="#cf222e" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -259,7 +259,7 @@ export default function ReportsPage() {
                 </tr>
               ))}
               <tr style={{ background: 'var(--surface-2)' }}>
-                <td style={{ fontWeight: 700 }}>Individual (non-pool)</td>
+                <td style={{ fontWeight: 600 }}>Individual (non-pool)</td>
                 <td className="num">{formatNumber(subs.data.filter(s => !s.companyId && s.status === 'active').length)}</td>
                 <td className="num">{formatZAR(Math.round(individualMrr))}</td>
                 <td className="num">{formatZAR(Math.round(individualMrr * 12))}</td>
@@ -289,7 +289,7 @@ export default function ReportsPage() {
           ].map((s) => (
             <div key={s.label} className="stack" style={{ gap: 4 }}>
               <span className="muted" style={{ fontSize: 12 }}>{s.label}</span>
-              <span style={{ fontSize: 22, fontWeight: 700, letterSpacing: '-0.02em' }}>
+              <span style={{ fontSize: 22, fontWeight: 800, letterSpacing: '-0.02em' }}>
                 <Pill tone={s.tone}>{s.value}</Pill>
               </span>
             </div>

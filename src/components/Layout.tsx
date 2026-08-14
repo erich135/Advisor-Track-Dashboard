@@ -6,8 +6,6 @@ import {
   CreditCard,
   TrendingUp,
   FolderKanban,
-  FileText,
-  LifeBuoy,
   Building2,
   Settings,
   BarChart3,
@@ -16,11 +14,8 @@ import {
 } from 'lucide-react';
 import { Avatar } from './ui';
 import { users } from '../data/seed';
-import { supportTickets } from '../data/seed';
 import { useAuth } from '../lib/useAuth';
 import { useDemoSession } from '../lib/demoSession';
-
-const openTickets = supportTickets.filter((t) => t.status !== 'resolved').length;
 
 interface NavEntry {
   to: string;
@@ -39,8 +34,6 @@ const primaryNav: NavEntry[] = [
 const businessNav: NavEntry[] = [
   { to: '/subscriptions', label: 'Subscriptions', icon: <CreditCard size={18} /> },
   { to: '/companies', label: 'Companies', icon: <Building2 size={18} /> },
-  { to: '/invoices', label: 'Invoices', icon: <FileText size={18} /> },
-  { to: '/support', label: 'Support', icon: <LifeBuoy size={18} />, badge: openTickets },
 ];
 
 const adminNav: NavEntry[] = [
@@ -118,7 +111,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   const profileRole = isDemoRoute ? selectedDemoUser!.role : sessionRole;
   const profileSub = isDemoRoute ? selectedDemoUser!.scopeLabel : session?.organisation?.name || sessionRole;
   const isFounderDemo = isDemoRoute && selectedDemoUser?.role === 'Founder/Admin';
-  const profileAvatarColor = isDemoRoute ? (isFounderDemo ? '#8b5cf6' : '#1f6feb') : me.avatarColor;
+  const profileAvatarColor = isDemoRoute ? (isFounderDemo ? '#8b5cf6' : '#1f6feb') : 'var(--brand)';
   const demoNav: NavEntry[] = isFounderDemo
     ? [...primaryNav, ...businessNav, ...foundersNav, ...adminNav]
     : [{ to: '/team-pipeline-demo', label: 'Team Pipeline', icon: <FolderKanban size={18} /> }];
@@ -127,13 +120,8 @@ export default function Layout({ children }: { children: ReactNode }) {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <span className="logo">
-            <TrendingUp size={18} />
-          </span>
-          <div>
-            <div className="name">AdvisorTrack</div>
-            <div className="tag">{isDemoRoute && selectedDemoUser ? selectedDemoUser.role : 'Admin Console'}</div>
-          </div>
+          <img className="sidebar-logo" src="/brand/logo-on-dark.svg" alt="AdvisorTrack" />
+          <div className="tag">{isDemoRoute && selectedDemoUser ? selectedDemoUser.role : 'Admin Console'}</div>
         </div>
 
         <nav>
@@ -188,7 +176,7 @@ export default function Layout({ children }: { children: ReactNode }) {
               marginLeft: 'auto',
               background: 'none',
               border: 'none',
-              color: '#768390',
+              color: 'rgba(255, 255, 255, 0.72)',
               cursor: 'pointer',
               padding: 4,
               display: 'flex',

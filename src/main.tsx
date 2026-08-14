@@ -20,10 +20,10 @@ function Root() {
       <div
         style={{
           minHeight: '100vh',
-          background: '#0d1117',
+          background: 'var(--navy)',
           display: 'grid',
           placeItems: 'center',
-          color: '#768390',
+          color: 'rgba(255, 255, 255, 0.72)',
           fontFamily: 'inherit',
           fontSize: 14,
         }}
