@@ -1,5 +1,5 @@
 import { useState, type CSSProperties, type FormEvent } from 'react';
-import { TrendingUp, Lock, Eye, EyeOff, Mail } from 'lucide-react';
+import { Lock, Eye, EyeOff, Mail } from 'lucide-react';
 
 type LoginPageProps = {
   onLogin: (email: string, password: string) => Promise<{ ok: true } | { ok: false; error: string }>;
@@ -34,11 +34,11 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
   const fieldStyle = (hasError: boolean): CSSProperties => ({
     width: '100%',
-    background: '#0d1117',
-    border: `1px solid ${hasError ? '#cf222e' : '#30363d'}`,
-    borderRadius: 8,
+    background: 'var(--navy)',
+    border: `1px solid ${hasError ? '#cf222e' : 'var(--border)'}`,
+    borderRadius: 5,
     padding: '10px 40px 10px 13px',
-    color: '#e6edf3',
+    color: 'var(--text-on-dark)',
     fontSize: 14,
     outline: 'none',
     boxSizing: 'border-box',
@@ -49,7 +49,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#0d1117',
+      background: 'var(--navy)',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
@@ -62,37 +62,32 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       }}>
         {/* Brand */}
         <div style={{ textAlign: 'center', marginBottom: 36 }}>
-          <div style={{
-            width: 56, height: 56, borderRadius: 14,
-            background: '#1f6feb', display: 'inline-grid',
-            placeItems: 'center', marginBottom: 14,
-          }}>
-            <TrendingUp size={26} color="#fff" />
-          </div>
-          <div style={{ color: '#fff', fontWeight: 700, fontSize: 22, letterSpacing: '-0.02em' }}>
-            AdvisorTrack
-          </div>
-          <div style={{ color: '#768390', fontSize: 13.5, marginTop: 4 }}>
+          <img
+            src="/brand/logo-on-dark.svg"
+            alt="AdvisorTrack"
+            style={{ display: 'block', width: 260, maxWidth: '100%', height: 'auto', margin: '0 auto 14px' }}
+          />
+          <div style={{ color: 'rgba(255, 255, 255, 0.68)', fontSize: 13.5, marginTop: 4 }}>
             Admin Console
           </div>
         </div>
 
         {/* Card */}
         <div style={{
-          background: '#161b22',
-          border: '1px solid #21262d',
-          borderRadius: 14,
+          background: 'var(--navy)',
+          border: '1px solid var(--border)',
+          borderRadius: 10,
           padding: '28px 28px 24px',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
-            <Lock size={16} color="#768390" />
-            <span style={{ color: '#c9d1d9', fontWeight: 600, fontSize: 14.5 }}>
+            <Lock size={16} color="rgba(255, 255, 255, 0.68)" />
+            <span style={{ color: 'var(--text-on-dark)', fontWeight: 600, fontSize: 14.5 }}>
               Sign in with your AdvisorTrack account
             </span>
           </div>
 
           <form onSubmit={submit}>
-            <label style={{ display: 'block', color: '#8b949e', fontSize: 12.5, marginBottom: 6 }}>
+            <label style={{ display: 'block', color: 'var(--text-on-dark)', fontSize: 12.5, marginBottom: 6 }}>
               Email
             </label>
             <div style={{ position: 'relative', marginBottom: 14 }}>
@@ -105,17 +100,17 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 placeholder="you@company.co.za"
                 style={fieldStyle(Boolean(error))}
                 onFocus={(e) => {
-                  if (!error) e.target.style.borderColor = '#1f6feb';
+                  if (!error) e.target.style.borderColor = 'var(--brand)';
                 }}
                 onBlur={(e) => {
-                  if (!error) e.target.style.borderColor = '#30363d';
+                  if (!error) e.target.style.borderColor = 'var(--border)';
                 }}
               />
               <span
                 style={{
                   position: 'absolute', right: 10, top: '50%',
                   transform: 'translateY(-50%)',
-                  color: '#768390',
+                  color: 'rgba(255, 255, 255, 0.68)',
                   display: 'grid', placeItems: 'center',
                   pointerEvents: 'none',
                 }}
@@ -124,7 +119,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               </span>
             </div>
 
-            <label style={{ display: 'block', color: '#8b949e', fontSize: 12.5, marginBottom: 6 }}>
+            <label style={{ display: 'block', color: 'var(--text-on-dark)', fontSize: 12.5, marginBottom: 6 }}>
               Password
             </label>
             <div style={{ position: 'relative', marginBottom: 14 }}>
@@ -136,10 +131,10 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                 placeholder="Password"
                 style={fieldStyle(Boolean(error))}
                 onFocus={(e) => {
-                  if (!error) e.target.style.borderColor = '#1f6feb';
+                  if (!error) e.target.style.borderColor = 'var(--brand)';
                 }}
                 onBlur={(e) => {
-                  if (!error) e.target.style.borderColor = '#30363d';
+                  if (!error) e.target.style.borderColor = 'var(--border)';
                 }}
               />
               <button
@@ -149,7 +144,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
                   position: 'absolute', right: 10, top: '50%',
                   transform: 'translateY(-50%)',
                   background: 'none', border: 'none',
-                  color: '#768390', cursor: 'pointer', padding: 2,
+                  color: 'rgba(255, 255, 255, 0.68)', cursor: 'pointer', padding: 2,
                   display: 'grid', placeItems: 'center',
                 }}
               >
@@ -167,18 +162,19 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             <button
               type="submit"
               disabled={!canSubmit}
+              className="login-submit"
               style={{
                 width: '100%',
-                background: canSubmit ? '#1f6feb' : '#21262d',
+                background: canSubmit ? 'var(--brand)' : 'rgba(255, 255, 255, 0.12)',
                 border: 'none',
-                borderRadius: 8,
-                color: canSubmit ? '#fff' : '#484f58',
+                borderRadius: 5,
+                color: canSubmit ? 'var(--text-on-dark)' : 'rgba(255, 255, 255, 0.42)',
                 fontWeight: 600,
                 fontSize: 14,
                 padding: '10px 0',
                 cursor: canSubmit ? 'pointer' : 'not-allowed',
                 fontFamily: 'inherit',
-                transition: 'background 0.15s',
+                transition: 'transform 0.12s ease',
               }}
             >
               {submitting ? 'Signing in…' : 'Sign in'}
@@ -186,7 +182,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           </form>
         </div>
 
-        <div style={{ textAlign: 'center', color: '#484f58', fontSize: 12, marginTop: 20 }}>
+        <div style={{ textAlign: 'center', color: 'rgba(255, 255, 255, 0.55)', fontSize: 12, marginTop: 20 }}>
           Internal tool · AdvisorTrack (Pty) Ltd
         </div>
       </div>
@@ -199,6 +195,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           60%      { transform: translateX(-5px); }
           80%      { transform: translateX(5px); }
         }
+        .login-submit:hover:not(:disabled) { transform: scale(0.98); }
       `}</style>
     </div>
   );

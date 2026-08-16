@@ -90,7 +90,7 @@ function CompanyCard({ c }: { c: CompanyCardModel }) {
             <Building2 size={18} color="#fff" />
           </span>
           <div>
-            <div style={{ fontWeight: 650 }}>{c.name}</div>
+            <div style={{ fontWeight: 600 }}>{c.name}</div>
             <div className="sm muted" style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 2 }}>
               {c.isPlatform ? <Pill tone="purple">Platform</Pill> : null}
               {c.isActive === true ? <Pill tone="green">Active</Pill> : null}
@@ -128,7 +128,7 @@ function CompanyCard({ c }: { c: CompanyCardModel }) {
           <span className="subtle" style={{ fontSize: 12 }}>
             {c.createdAt ? 'Created' : 'Seat capacity'}
           </span>
-          <span style={{ fontWeight: 700 }}>
+          <span style={{ fontWeight: 600 }}>
             {c.createdAt ? formatDate(c.createdAt) : capacityLabel}
           </span>
         </div>

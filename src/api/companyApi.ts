@@ -48,6 +48,16 @@ export type CompanyRoleDetail = {
   createdAt?: string;
 };
 
+export type CreateCompanyRoleInput = {
+  name: string;
+  permissions?: string[];
+};
+
+export type UpdateCompanyRoleInput = {
+  name?: string;
+  permissions?: string[];
+};
+
 export async function getCompanyMe(): Promise<CompanyMe> {
   return apiRequest<CompanyMe>('/company/me');
 }
@@ -65,6 +75,34 @@ export async function getCompanyMember(memberId: string): Promise<CompanyMemberD
 /** Roles + permission keys for the signed-in user's company. */
 export async function getCompanyRoles(): Promise<CompanyRoleDetail[]> {
   return apiRequest<CompanyRoleDetail[]>('/company/roles');
+}
+
+/** Creates a custom company role. Backend manage_roles permission remains authoritative. */
+export async function createCompanyRole(
+  input: CreateCompanyRoleInput,
+): Promise<CompanyRoleDetail> {
+  return apiRequest<CompanyRoleDetail>('/company/roles', {
+    method: 'POST',
+    body: input,
+  });
+}
+
+/** Renames a company role and/or replaces its permission keys. */
+export async function updateCompanyRole(
+  roleId: string,
+  input: UpdateCompanyRoleInput,
+): Promise<CompanyRoleDetail> {
+  return apiRequest<CompanyRoleDetail>(`/company/roles/${encodeURIComponent(roleId)}`, {
+    method: 'PATCH',
+    body: input,
+  });
+}
+
+/** Deletes a non-system company role. */
+export async function deleteCompanyRole(roleId: string): Promise<{ deleted: boolean }> {
+  return apiRequest<{ deleted: boolean }>(`/company/roles/${encodeURIComponent(roleId)}`, {
+    method: 'DELETE',
+  });
 }
 
 export type CompanyPermission = {

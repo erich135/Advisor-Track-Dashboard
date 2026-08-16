@@ -1,4 +1,3 @@
-import { TrendingUp } from 'lucide-react';
 import type { Invoice } from '../domain/types';
 import { invoiceTotals } from '../lib/invoice';
 import { formatZAR, formatDate, formatPercent } from '../lib/format';
@@ -11,7 +10,7 @@ export function InvoiceDocument({ invoice }: { invoice: Invoice }) {
     <div className="invoice-doc" id="invoice-print">
       <div className="inv-head">
         <div className="inv-brand">
-          <span className="inv-logo"><TrendingUp size={22} /></span>
+          <span className="inv-logo"><img src="/brand/icon-blue.svg" alt="" /></span>
           <div>
             <div className="inv-co">AdvisorTrack (Pty) Ltd</div>
             <div className="inv-co-sub">Reg 2026/123456/07 · VAT 4123456789</div>

@@ -1,8 +1,6 @@
-import { Link } from 'react-router-dom';
+import type { ReactNode } from 'react';
 import {
   ResponsiveContainer,
-  AreaChart,
-  Area,
   BarChart,
   Bar,
   PieChart,
@@ -11,250 +9,302 @@ import {
   XAxis,
   YAxis,
   Tooltip,
+  Legend,
   CartesianGrid,
 } from 'recharts';
+import { AlertCircle, BadgeCheck, Clock3, ListChecks, Users } from 'lucide-react';
+import { getCompanyMembers, type CompanyMember } from '../api/companyApi';
 import {
-  Users,
-  CreditCard,
-  TrendingUp,
-  Wallet,
-  ArrowUpRight,
-  LifeBuoy,
-} from 'lucide-react';
-import { seedDataService as db } from '../data/seedDataService';
+  getManagementProductionSummary,
+  type ManagementProductionAdvisor,
+} from '../api/managementApi';
 import { useAsync } from '../lib/useAsync';
-import { Avatar, Pill, Progress, StatCard, SkeletonRows } from '../components/ui';
-import { formatZAR, formatNumber, formatPercent } from '../lib/format';
-import {
-  mrr,
-  arr,
-  activeSubscribers,
-  trialCount,
-  issuedCommission,
-  potentialCommission,
-  advisorPerformance,
-  weeklyTrend,
-  revenueByPlan,
-} from '../lib/analytics';
+import { Avatar, Progress, SkeletonRows } from '../components/ui';
+import { formatNumber, formatZAR } from '../lib/format';
 
-const PIE_COLORS = ['#1f6feb', '#8250df'];
+const STATUS_COLORS = ['#0E51E4', '#9A6700'];
+const AVATAR_COLORS = ['#0E51E4', '#8250df', '#1a7f37', '#9a6700', '#020921'];
+
+function getLocalMonth(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatMonth(month: string): string {
+  const [year, monthNumber] = month.split('-').map(Number);
+  return new Intl.DateTimeFormat('en-ZA', { month: 'long', year: 'numeric' }).format(
+    new Date(year, monthNumber - 1, 1),
+  );
+}
+
+function pluraliseEntries(count: number): string {
+  return `${formatNumber(count)} ${count === 1 ? 'entry' : 'entries'}`;
+}
+
+function avatarColorFor(id: string): string {
+  let hash = 0;
+  for (let index = 0; index < id.length; index += 1) {
+    hash = (hash * 31 + id.charCodeAt(index)) | 0;
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
+function advisorName(advisor: ManagementProductionAdvisor, member?: CompanyMember): string {
+  const summaryName = `${advisor.firstName ?? ''} ${advisor.lastName ?? ''}`.trim();
+  if (summaryName) return summaryName;
+  const memberName = `${member?.firstName ?? ''} ${member?.lastName ?? ''}`.trim();
+  return memberName || 'Advisor';
+}
+
+function accessContext(member?: CompanyMember): string {
+  const role = member?.role?.name;
+  const access = member?.subscription?.status
+    ? `${member.subscription.status.charAt(0).toUpperCase()}${member.subscription.status.slice(1)} access`
+    : null;
+  return [role, access].filter(Boolean).join(' · ') || 'In management scope';
+}
+
+function ManagementStatCard({
+  label,
+  value,
+  detail,
+  icon,
+  iconBg,
+  iconColor,
+}: {
+  label: string;
+  value: ReactNode;
+  detail: string;
+  icon: ReactNode;
+  iconBg: string;
+  iconColor: string;
+}) {
+  return (
+    <div className="card card-pad stat">
+      <div className="stat-top">
+        <span className="label">{label}</span>
+        <span className="icon" style={{ background: iconBg, color: iconColor }}>
+          {icon}
+        </span>
+      </div>
+      <span className="value">{value}</span>
+      <span className="subtle" style={{ fontSize: 12 }}>{detail}</span>
+    </div>
+  );
+}
 
 export default function DashboardPage() {
-  const advisors = useAsync(() => db.getAdvisors());
-  const subs = useAsync(() => db.getSubscriptions());
-  const cases = useAsync(() => db.getProductionCases());
-  const activity = useAsync(() => db.getWeeklyActivity());
-  const tickets = useAsync(() => db.getSupportTickets());
+  const month = getLocalMonth();
+  const monthLabel = formatMonth(month);
+  const dashboard = useAsync(
+    async () => {
+      const [members, production] = await Promise.all([
+        getCompanyMembers(),
+        getManagementProductionSummary(month),
+      ]);
+      return { members, production };
+    },
+    [month],
+  );
 
-  if (!advisors.data || !subs.data || !cases.data || !activity.data || !tickets.data) {
+  if (dashboard.loading) {
     return <SkeletonRows rows={6} cols={4} />;
   }
 
-  const monthlyRecurring = mrr(subs.data);
-  const annualRecurring = arr(subs.data);
-  const active = activeSubscribers(subs.data);
-  const trials = trialCount(subs.data);
-  const issued = issuedCommission(cases.data);
-  const potential = potentialCommission(cases.data);
-  const perf = advisorPerformance(advisors.data, cases.data, activity.data);
-  const trend = weeklyTrend(activity.data);
-  const planSplit = revenueByPlan(subs.data);
-  const openTickets = tickets.data.filter((t) => t.status !== 'resolved');
+  if (dashboard.error || !dashboard.data) {
+    return (
+      <div className="card">
+        <div className="empty">
+          <AlertCircle size={24} color="var(--red)" style={{ marginBottom: 8 }} />
+          <h3>Management data is unavailable</h3>
+          <p className="muted" style={{ margin: '6px 0 0' }}>
+            The Dashboard could not load the current management scope. No fallback or demo data is being shown.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
-  const topPerformers = perf.slice(0, 5);
+  const { members, production } = dashboard.data;
+  const membersById = new Map(members.map((member) => [member.id, member]));
+  const totalEntries = production.issuedCount + production.nonIssuedCount;
+  const totalAmount = production.issuedAmount + production.nonIssuedAmount;
+  const hasProductionAmounts = totalAmount > 0;
+  const statusSplit = [
+    { name: 'Issued Production', value: production.issuedAmount },
+    { name: 'Not Yet Issued', value: production.nonIssuedAmount },
+  ];
+  const rankedAdvisors = [...production.advisors].sort(
+    (left, right) =>
+      right.issuedAmount - left.issuedAmount ||
+      right.nonIssuedAmount - left.nonIssuedAmount,
+  );
+  const advisorChart = rankedAdvisors.map((advisor) => ({
+    advisor: advisorName(advisor, membersById.get(advisor.userId)),
+    issued: advisor.issuedAmount,
+    nonIssued: advisor.nonIssuedAmount,
+  }));
 
   return (
     <>
+      <p className="page-intro" style={{ marginTop: 0 }}>
+        AdvisorTrack-recorded advisor production for {monthLabel}. These figures are not SaaS billing revenue or insurer-reconciled revenue.
+      </p>
+
       <div className="grid grid-4">
-        <StatCard
-          label="Monthly Recurring Revenue"
-          value={formatZAR(monthlyRecurring)}
-          icon={<Wallet size={18} />}
-          iconBg="var(--green-soft)"
-          iconColor="var(--green)"
-          delta={{ dir: 'up', text: '8.2% vs last month' }}
-        />
-        <StatCard
-          label="Annual Run Rate"
-          value={formatZAR(annualRecurring)}
-          icon={<TrendingUp size={18} />}
+        <ManagementStatCard
+          label="Advisors in Scope"
+          value={formatNumber(production.advisorCount)}
+          detail={`${formatNumber(members.length)} scoped member ${members.length === 1 ? 'record' : 'records'} visible`}
+          icon={<Users size={18} />}
           iconBg="var(--brand-soft)"
           iconColor="var(--brand)"
-          delta={{ dir: 'up', text: 'projected' }}
         />
-        <StatCard
-          label="Active Subscribers"
-          value={formatNumber(active)}
-          icon={<CreditCard size={18} />}
-          iconBg="var(--purple-soft)"
-          iconColor="var(--purple)"
-          delta={{ dir: 'up', text: `${trials} on trial` }}
+        <ManagementStatCard
+          label="Issued Production"
+          value={formatZAR(production.issuedAmount)}
+          detail={`${pluraliseEntries(production.issuedCount)} issued`}
+          icon={<BadgeCheck size={18} />}
+          iconBg="var(--green-soft)"
+          iconColor="var(--green)"
         />
-        <StatCard
-          label="Issued Commission (advisors)"
-          value={formatZAR(issued)}
-          icon={<Users size={18} />}
+        <ManagementStatCard
+          label="Not Yet Issued"
+          value={formatZAR(production.nonIssuedAmount)}
+          detail={`${pluraliseEntries(production.nonIssuedCount)} not yet issued`}
+          icon={<Clock3 size={18} />}
           iconBg="var(--amber-soft)"
           iconColor="var(--amber)"
-          delta={{ dir: 'up', text: `${formatZAR(potential)} in pipeline` }}
+        />
+        <ManagementStatCard
+          label="Production Entries"
+          value={formatNumber(totalEntries)}
+          detail={monthLabel}
+          icon={<ListChecks size={18} />}
+          iconBg="var(--purple-soft)"
+          iconColor="var(--purple)"
         />
       </div>
 
       <div className="grid grid-3" style={{ marginTop: 16 }}>
         <div className="card" style={{ gridColumn: 'span 2' }}>
           <div className="card-head">
-            <h3>Activity & issued cases — last 8 weeks</h3>
-            <span className="hint">All advisors combined</span>
+            <h3>Production by advisor — current month</h3>
+            <span className="hint">{monthLabel}</span>
           </div>
-          <div style={{ padding: '12px 12px 4px' }}>
-            <ResponsiveContainer width="100%" height={260}>
-              <AreaChart data={trend} margin={{ top: 8, right: 12, left: -8, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="gPoints" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#1f6feb" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="#1f6feb" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-muted)" vertical={false} />
-                <XAxis dataKey="week" tick={{ fontSize: 12, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 12, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
-                <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid var(--border)', fontSize: 13 }} />
-                <Area type="monotone" dataKey="points" name="Activity points" stroke="#1f6feb" strokeWidth={2} fill="url(#gPoints)" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card-head">
-            <h3>Revenue by plan</h3>
-            <span className="hint">MRR</span>
-          </div>
-          <div style={{ padding: 12 }}>
-            <ResponsiveContainer width="100%" height={180}>
-              <PieChart>
-                <Pie data={planSplit} dataKey="value" innerRadius={48} outerRadius={72} paddingAngle={2}>
-                  {planSplit.map((_, i) => (
-                    <Cell key={i} fill={PIE_COLORS[i]} />
-                  ))}
-                </Pie>
-                <Tooltip formatter={(v: number) => formatZAR(v)} contentStyle={{ borderRadius: 10, border: '1px solid var(--border)', fontSize: 13 }} />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="stack" style={{ gap: 8, marginTop: 6 }}>
-              {planSplit.map((p, i) => (
-                <div key={p.name} className="row between">
-                  <span className="row" style={{ gap: 8 }}>
-                    <span style={{ width: 10, height: 10, borderRadius: 3, background: PIE_COLORS[i] }} />
-                    {p.name}
-                  </span>
-                  <strong>{formatZAR(p.value)}</strong>
-                </div>
-              ))}
+          {hasProductionAmounts ? (
+            <div style={{ padding: '12px 12px 4px' }}>
+              <ResponsiveContainer width="100%" height={260}>
+                <BarChart data={advisorChart} margin={{ top: 8, right: 12, left: 4, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border-muted)" vertical={false} />
+                  <XAxis dataKey="advisor" tick={{ fontSize: 12, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 12, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                  <Tooltip formatter={(value: number) => formatZAR(value)} contentStyle={{ borderRadius: 10, border: '1px solid var(--border)', fontSize: 13 }} />
+                  <Legend wrapperStyle={{ fontSize: 12 }} />
+                  <Bar dataKey="issued" name="Issued Production" fill="#0E51E4" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="nonIssued" name="Not Yet Issued" fill="#9A6700" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-3" style={{ marginTop: 16 }}>
-        <div className="card" style={{ gridColumn: 'span 2' }}>
-          <div className="card-head">
-            <h3>Top performers</h3>
-            <Link to="/advisors" className="btn ghost sm">
-              View all <ArrowUpRight size={14} />
-            </Link>
-          </div>
-          <div className="table-wrap">
-            <table className="data">
-              <thead>
-                <tr>
-                  <th>Advisor</th>
-                  <th className="num">Week points</th>
-                  <th className="num">Issued</th>
-                  <th className="num">Commission</th>
-                  <th style={{ width: 160 }}>Target attainment</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topPerformers.map((p) => (
-                  <tr key={p.advisor.id}>
-                    <td>
-                      <Link to={`/advisors/${p.advisor.id}`} className="cell-user">
-                        <Avatar name={p.advisor.name} color={p.advisor.avatarColor} />
-                        <div>
-                          <div className="nm">{p.advisor.name}</div>
-                          <div className="sm">{p.advisor.city}</div>
-                        </div>
-                      </Link>
-                    </td>
-                    <td className="num">{p.weekPoints}</td>
-                    <td className="num">{p.issuedCount}</td>
-                    <td className="num">{formatZAR(p.issuedCommission)}</td>
-                    <td>
-                      <div className="row" style={{ gap: 8 }}>
-                        <Progress
-                          value={p.attainment * 100}
-                          color={p.attainment >= 1 ? 'var(--green)' : undefined}
-                        />
-                        <span className="subtle" style={{ minWidth: 38, textAlign: 'right' }}>
-                          {formatPercent(p.attainment)}
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          ) : (
+            <div className="empty">No production amounts have been recorded for {monthLabel}.</div>
+          )}
         </div>
 
         <div className="card">
           <div className="card-head">
-            <h3>Open queries</h3>
-            <Link to="/support" className="btn ghost sm">
-              <LifeBuoy size={14} /> Inbox
-            </Link>
+            <h3>Production status — current month</h3>
+            <span className="hint">Recorded amount</span>
           </div>
-          <div className="stack" style={{ padding: 12, gap: 10 }}>
-            {openTickets.slice(0, 4).map((t) => (
-              <Link
-                to="/support"
-                key={t.id}
-                className="card-pad"
-                style={{ border: '1px solid var(--border-muted)', borderRadius: 10, display: 'block' }}
-              >
-                <div className="row between" style={{ marginBottom: 4 }}>
-                  <span className="subtle" style={{ fontSize: 12 }}>{t.reference}</span>
-                  <Pill tone={t.priority === 'high' ? 'red' : t.priority === 'medium' ? 'amber' : 'grey'}>
-                    {t.priority}
-                  </Pill>
-                </div>
-                <div style={{ fontWeight: 600, fontSize: 13.5 }}>{t.subject}</div>
-                <div className="sm muted" style={{ fontSize: 12 }}>{t.requesterName}</div>
-              </Link>
-            ))}
-            {openTickets.length === 0 && <div className="empty">No open queries 🎉</div>}
-          </div>
+          {hasProductionAmounts ? (
+            <div style={{ padding: 12 }}>
+              <ResponsiveContainer width="100%" height={180}>
+                <PieChart>
+                  <Pie data={statusSplit} dataKey="value" innerRadius={48} outerRadius={72} paddingAngle={2}>
+                    {statusSplit.map((item, index) => (
+                      <Cell key={item.name} fill={STATUS_COLORS[index]} />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value: number) => formatZAR(value)} contentStyle={{ borderRadius: 10, border: '1px solid var(--border)', fontSize: 13 }} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="stack" style={{ gap: 8, marginTop: 6 }}>
+                {statusSplit.map((item, index) => (
+                  <div key={item.name} className="row between">
+                    <span className="row" style={{ gap: 8 }}>
+                      <span style={{ width: 10, height: 10, borderRadius: 3, background: STATUS_COLORS[index] }} />
+                      {item.name}
+                    </span>
+                    <strong>{formatZAR(item.value)}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="empty">No production amounts have been recorded for {monthLabel}.</div>
+          )}
         </div>
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>
         <div className="card-head">
-          <h3>Weekly cold calls vs issued</h3>
-          <span className="hint">Pipeline health</span>
+          <h3>Top performers</h3>
+          <span className="hint">Ranked by issued, then not-yet-issued production</span>
         </div>
-        <div style={{ padding: '12px 12px 4px' }}>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={trend} margin={{ top: 8, right: 12, left: -8, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-muted)" vertical={false} />
-              <XAxis dataKey="week" tick={{ fontSize: 12, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 12, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ borderRadius: 10, border: '1px solid var(--border)', fontSize: 13 }} />
-              <Bar dataKey="coldCalls" name="Cold calls" fill="#8250df" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="issued" name="Issued" fill="#1a7f37" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
+        {rankedAdvisors.length > 0 ? (
+          <div className="table-wrap">
+            <table className="data">
+              <thead>
+                <tr>
+                  <th>Advisor</th>
+                  <th className="num">Issued</th>
+                  <th className="num">Not Yet Issued</th>
+                  <th className="num">Goal</th>
+                  <th style={{ width: 180 }}>Attainment</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rankedAdvisors.map((advisor) => {
+                  const member = membersById.get(advisor.userId);
+                  const name = advisorName(advisor, member);
+                  return (
+                    <tr key={advisor.userId}>
+                      <td>
+                        <div className="cell-user">
+                          <Avatar name={name} color={avatarColorFor(advisor.userId)} />
+                          <div>
+                            <div className="nm">{name}</div>
+                            <div className="sm">{accessContext(member)}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="num">{formatZAR(advisor.issuedAmount)}</td>
+                      <td className="num">{formatZAR(advisor.nonIssuedAmount)}</td>
+                      <td className="num">{advisor.goalAmount == null ? '—' : formatZAR(advisor.goalAmount)}</td>
+                      <td>
+                        {advisor.attainmentPercent == null ? (
+                          <span className="subtle">—</span>
+                        ) : (
+                          <div className="row" style={{ gap: 8 }}>
+                            <Progress
+                              value={advisor.attainmentPercent}
+                              color={advisor.attainmentPercent >= 100 ? 'var(--green)' : undefined}
+                            />
+                            <span className="subtle" style={{ minWidth: 46, textAlign: 'right' }}>
+                              {advisor.attainmentPercent.toFixed(0)}%
+                            </span>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="empty">No advisors are available in the current management scope.</div>
+        )}
       </div>
     </>
   );

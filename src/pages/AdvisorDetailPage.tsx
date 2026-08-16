@@ -7,7 +7,7 @@ import { useAsync } from '../lib/useAsync';
 import { Avatar, Pill, SkeletonRows } from '../components/ui';
 import { formatDate } from '../lib/format';
 
-const AVATAR_COLORS = ['#1f6feb', '#8957e5', '#2da44e', '#bf8700', '#cf222e', '#0969da', '#1a7f37'];
+const AVATAR_COLORS = ['#0E51E4', '#8957e5', '#2da44e', '#bf8700', '#cf222e', '#020921', '#1a7f37'];
 
 function avatarColorFor(id: string): string {
   let hash = 0;
