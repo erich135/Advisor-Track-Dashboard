@@ -7,6 +7,7 @@ import {
   setUnauthorizedHandler,
 } from '../api/apiClient';
 import { getMe, login as loginRequest, type AuthUser } from '../api/authApi';
+import { enterDemo, switchDemoRole, resetDemo, type DemoPublicRole } from '../api/demoApi';
 import { getCompanyMe, type CompanyMe } from '../api/companyApi';
 import { getSubscriptionMe, type SubscriptionMe } from '../api/subscriptionApi';
 
@@ -21,6 +22,7 @@ export type AuthSession = {
   permissions: string[];
   reportsToUserId: string | null;
   isPlatformAdmin: boolean;
+  hierarchy: CompanyMe['hierarchy'] | null;
 };
 
 type AuthSnapshot = {
@@ -87,6 +89,7 @@ function toSession(
     permissions: companyMe?.permissions ?? [],
     reportsToUserId: companyMe?.reportsToUserId ?? null,
     isPlatformAdmin: companyMe?.isPlatformAdmin ?? false,
+    hierarchy: companyMe?.hierarchy ?? null,
   };
 }
 
@@ -126,7 +129,7 @@ async function boot() {
     writeStoredSession(session);
     setSnapshot({ status: 'ready', session });
   } catch (error) {
-    if (error instanceof ApiError && (error.status === 401 || error.code === 'UNAUTHORIZED' || error.code === 'TOKEN_EXPIRED' || error.code === 'INVALID_TOKEN')) {
+    if (error instanceof ApiError && (error.status === 401 || error.code === 'UNAUTHORIZED' || error.code === 'TOKEN_EXPIRED' || error.code === 'INVALID_TOKEN' || error.code === 'DEMO_SESSION_EXPIRED' || error.code === 'DEMO_SESSION_REQUIRED')) {
       clearLocalSession();
       return;
     }
@@ -173,7 +176,10 @@ export function toAuthErrorMessage(error: unknown): string {
     if (error.code === 'EMAIL_NOT_VERIFIED') {
       return 'Your email is not verified yet. Check your inbox for the verification code, then try again.';
     }
-    if (error.code === 'INVALID_CREDENTIALS' || error.status === 401) {
+    if (error.code === 'DEMO_SESSION_EXPIRED' || error.code === 'DEMO_SESSION_REQUIRED') {
+      return 'Your demo session has ended. Choose a management role to start again.';
+    }
+    if (error.code === 'INVALID_CREDENTIALS') {
       return 'Invalid email or password.';
     }
     if (error.code === 'NETWORK_ERROR') {
@@ -206,6 +212,40 @@ export function useAuth() {
     }
   }, []);
 
+  const enterDemoRole = useCallback(async (role: DemoPublicRole) => {
+    try {
+      const result = await enterDemo(role);
+      setStoredToken(result.token);
+      const next = await loadPostLoginSession(result.user);
+      writeStoredSession(next);
+      setSnapshot({ status: 'ready', session: next });
+      return { ok: true as const };
+    } catch (error) {
+      clearStoredToken();
+      writeStoredSession(null);
+      setSnapshot({ status: 'ready', session: null });
+      return { ok: false as const, error: toAuthErrorMessage(error) };
+    }
+  }, []);
+
+  const switchDemoPersona = useCallback(async (role: DemoPublicRole) => {
+    const result = await switchDemoRole(role);
+    setStoredToken(result.token);
+    const next = await loadPostLoginSession(result.user);
+    writeStoredSession(next);
+    setSnapshot({ status: 'ready', session: next });
+    return { ok: true as const };
+  }, []);
+
+  const resetDemoWorkspace = useCallback(async () => {
+    const result = await resetDemo();
+    setStoredToken(result.token);
+    const next = await loadPostLoginSession(result.user);
+    writeStoredSession(next);
+    setSnapshot({ status: 'ready', session: next });
+    return { ok: true as const };
+  }, []);
+
   const signOut = useCallback(() => {
     clearLocalSession();
   }, []);
@@ -215,6 +255,9 @@ export function useAuth() {
     authed: Boolean(session),
     session,
     login,
+    enterDemoRole,
+    switchDemoPersona,
+    resetDemoWorkspace,
     signOut,
   };
 }

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { Building2, Users, Briefcase } from 'lucide-react';
 import { ApiError } from '../api/apiClient';
 import { getCompanyMe, getCompanyMembers } from '../api/companyApi';
@@ -81,8 +82,7 @@ function CompanyCard({ c }: { c: CompanyCardModel }) {
   const util = utilisationPercent(c.memberCount, c.seatLimit);
   const membersLabel = c.memberCount == null ? '—' : String(c.memberCount);
   const capacityLabel = seatCapacityLabel(c.seatLimit);
-
-  return (
+  const content = (
     <div className="card card-pad">
       <div className="row between" style={{ marginBottom: 12 }}>
         <div className="row" style={{ gap: 10 }}>
@@ -135,6 +135,15 @@ function CompanyCard({ c }: { c: CompanyCardModel }) {
       </div>
     </div>
   );
+
+  if (!c.isPlatform) {
+    return (
+      <Link to={`/companies/${c.id}`} style={{ color: 'inherit', textDecoration: 'none' }}>
+        {content}
+      </Link>
+    );
+  }
+  return content;
 }
 
 export default function CompaniesPage() {
@@ -181,7 +190,7 @@ export default function CompaniesPage() {
     <>
       <PageIntro>
         {mode === 'platform'
-          ? 'All organisations on the platform. Member counts are occupancy; seat capacity is informational only.'
+          ? 'All organisations on the platform. Open a customer to see users, subscription, licences and invoices together.'
           : 'Your organisation. Member counts are occupancy; seat capacity is informational only.'}
       </PageIntro>
 

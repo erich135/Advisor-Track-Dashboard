@@ -3,12 +3,14 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "AdvisorTrack Director/Admin web dashboard (internal creation-team tool)",
+  "description": "AdvisorTrack Management Portal",
   "scripts": {
     "dev": "vite",
+    "dev:demo": "vite --mode demo --port 5174 --strictPort",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:demo": "tsc --noEmit && vite build --mode demo"
   },
   "dependencies": {
     "date-fns": "^4.1.0",
