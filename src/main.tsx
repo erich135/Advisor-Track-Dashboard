@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter, useLocation } from 'react-router-dom';
 import App from './App';
 import LoginPage from './pages/LoginPage';
+import { ToastProvider } from './components/ui';
 import { useAuth } from './lib/useAuth';
 import './styles/global.css';
 
@@ -20,10 +21,10 @@ function Root() {
       <div
         style={{
           minHeight: '100vh',
-          background: 'var(--navy)',
+          background: 'var(--color-white)',
           display: 'grid',
           placeItems: 'center',
-          color: 'rgba(255, 255, 255, 0.72)',
+          color: 'var(--text-muted)',
           fontFamily: 'inherit',
           fontSize: 14,
         }}
@@ -40,7 +41,9 @@ function Root() {
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
-      <Root />
+      <ToastProvider>
+        <Root />
+      </ToastProvider>
     </BrowserRouter>
   </React.StrictMode>,
 );

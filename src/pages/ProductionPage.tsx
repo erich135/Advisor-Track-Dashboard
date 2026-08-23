@@ -11,73 +11,124 @@ import {
   Legend,
 } from 'recharts';
 import { TrendingUp, CheckCircle2, Clock, Wallet } from 'lucide-react';
-import { seedDataService as db } from '../data/seedDataService';
-import { fetchDataService } from '../data/fetchDataService';
+import {
+  getManagementProductionEntries,
+  getManagementProductionSummary,
+} from '../api/managementApi';
 import { useAsync } from '../lib/useAsync';
-import { Avatar, Pill, StatCard, SkeletonRows, PageIntro } from '../components/ui';
+import { Avatar, EmptyState, Pill, StatCard, SkeletonRows, PageIntro } from '../components/ui';
 import { formatZAR, formatDate } from '../lib/format';
-import { issuedCommission, potentialCommission } from '../lib/analytics';
+
+const AVATAR_COLORS = ['#0E51E4', '#8250df', '#1a7f37', '#9a6700', '#020921'];
+
+function getLocalMonth(): string {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function formatMonth(month: string): string {
+  const [year, monthNumber] = month.split('-').map(Number);
+  return new Intl.DateTimeFormat('en-ZA', { month: 'long', year: 'numeric' }).format(
+    new Date(year, monthNumber - 1, 1),
+  );
+}
+
+function avatarColorFor(id: string): string {
+  let hash = 0;
+  for (let index = 0; index < id.length; index += 1) {
+    hash = (hash * 31 + id.charCodeAt(index)) | 0;
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
+function advisorName(firstName: string, lastName: string): string {
+  return `${firstName ?? ''} ${lastName ?? ''}`.trim() || 'Advisor';
+}
 
 export default function ProductionPage() {
-  const cases = useAsync(() => fetchDataService.getProductionCases());
-  const advisors = useAsync(() => db.getAdvisors());
+  const month = getLocalMonth();
+  const monthLabel = formatMonth(month);
   const [status, setStatus] = useState<'all' | 'submitted' | 'issued'>('all');
+  const production = useAsync(
+    async () => {
+      const [summary, entries] = await Promise.all([
+        getManagementProductionSummary(month),
+        getManagementProductionEntries(month),
+      ]);
+      return { summary, entries };
+    },
+    [month],
+  );
 
-  const advisorMap = useMemo(() => new Map(advisors.data?.map((a) => [a.id, a]) ?? []), [advisors.data]);
+  const perAdvisor = useMemo(() => {
+    const advisors = production.data?.summary.advisors ?? [];
+    return advisors
+      .map((advisor) => ({
+        name: advisorName(advisor.firstName, advisor.lastName).split(' ')[0],
+        issued: advisor.issuedAmount,
+        pipeline: advisor.nonIssuedAmount,
+      }))
+      .filter((row) => row.issued > 0 || row.pipeline > 0)
+      .sort((a, b) => b.issued - a.issued)
+      .slice(0, 8);
+  }, [production.data]);
 
-  if (!cases.data || !advisors.data) return <SkeletonRows rows={8} cols={5} />;
+  if (production.loading) return <SkeletonRows rows={8} cols={5} />;
 
-  const issued = issuedCommission(cases.data);
-  const potential = potentialCommission(cases.data);
-  const issuedCount = cases.data.filter((c) => c.status === 'issued').length;
-  const pipelineCount = cases.data.filter((c) => c.status === 'submitted').length;
+  if (production.error || !production.data) {
+    return (
+      <div className="card">
+        <EmptyState title="Production could not be loaded">
+          Current management production could not be loaded. No fallback data is being shown.
+        </EmptyState>
+      </div>
+    );
+  }
 
-  // Per-advisor issued vs potential for the chart.
-  const perAdvisor = advisors.data
-    .filter((a) => a.active)
-    .map((a) => {
-      const mine = cases.data!.filter((c) => c.advisorId === a.id);
-      return {
-        name: a.name.split(' ')[0],
-        issued: mine.filter((c) => c.status === 'issued').reduce((s, c) => s + (c.issuedCommission ?? 0), 0),
-        pipeline: mine.filter((c) => c.status === 'submitted').reduce((s, c) => s + c.potentialCommission, 0),
-      };
+  const { summary, entries } = production.data;
+  const rows = entries.entries
+    .filter((entry) => {
+      if (status === 'all') return true;
+      if (status === 'issued') return entry.isIssued;
+      return !entry.isIssued;
     })
-    .sort((a, b) => b.issued - a.issued)
-    .slice(0, 8);
-
-  const rows = cases.data
-    .filter((c) => (status === 'all' ? true : c.status === status))
     .sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
 
   return (
     <>
-      <PageIntro>Submitted vs issued cases and commission across the whole advisor base.</PageIntro>
+      <PageIntro>
+        Submitted vs issued cases and commission for {monthLabel}, using the same recorded
+        production entries as the Dashboard.
+      </PageIntro>
 
       <div className="grid grid-4">
-        <StatCard label="Issued commission" value={formatZAR(issued)} icon={<Wallet size={18} />} iconBg="var(--green-soft)" iconColor="var(--green)" />
-        <StatCard label="Pipeline value" value={formatZAR(potential)} icon={<TrendingUp size={18} />} iconBg="var(--brand-soft)" iconColor="var(--brand)" />
-        <StatCard label="Cases issued" value={issuedCount} icon={<CheckCircle2 size={18} />} iconBg="var(--purple-soft)" iconColor="var(--purple)" />
-        <StatCard label="In pipeline" value={pipelineCount} icon={<Clock size={18} />} iconBg="var(--amber-soft)" iconColor="var(--amber)" />
+        <StatCard label="Issued commission" value={formatZAR(summary.issuedAmount)} icon={<Wallet size={18} />} iconBg="var(--green-soft)" iconColor="var(--green)" />
+        <StatCard label="Pipeline value" value={formatZAR(summary.nonIssuedAmount)} icon={<TrendingUp size={18} />} iconBg="var(--brand-soft)" iconColor="var(--brand)" />
+        <StatCard label="Cases issued" value={summary.issuedCount} icon={<CheckCircle2 size={18} />} iconBg="var(--purple-soft)" iconColor="var(--purple)" />
+        <StatCard label="In pipeline" value={summary.nonIssuedCount} icon={<Clock size={18} />} iconBg="var(--amber-soft)" iconColor="var(--amber)" />
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>
         <div className="card-head">
           <h3>Issued vs pipeline commission by advisor</h3>
-          <span className="hint">Top 8</span>
+          <span className="hint">Top 8 · {monthLabel}</span>
         </div>
         <div style={{ padding: '12px 12px 4px' }}>
-          <ResponsiveContainer width="100%" height={280}>
-            <BarChart data={perAdvisor} margin={{ top: 8, right: 12, left: 8, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border-muted)" vertical={false} />
-              <XAxis dataKey="name" tick={{ fontSize: 12, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
-              <YAxis tickFormatter={(v) => `R${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 12, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
-              <Tooltip formatter={(v: number) => formatZAR(v)} contentStyle={{ borderRadius: 10, border: '1px solid var(--border)', fontSize: 13 }} />
-              <Legend wrapperStyle={{ fontSize: 13 }} />
-              <Bar dataKey="issued" name="Issued" stackId="a" fill="#1a7f37" radius={[0, 0, 0, 0]} />
-              <Bar dataKey="pipeline" name="Pipeline" stackId="a" fill="#0E51E4" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          {perAdvisor.length > 0 ? (
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={perAdvisor} margin={{ top: 8, right: 12, left: 8, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border-muted)" vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 12, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                <YAxis tickFormatter={(v) => `R${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 12, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
+                <Tooltip formatter={(v: number) => formatZAR(v)} contentStyle={{ borderRadius: 10, border: '1px solid var(--border)', fontSize: 13 }} />
+                <Legend wrapperStyle={{ fontSize: 13 }} />
+                <Bar dataKey="issued" name="Issued" stackId="a" fill="#1a7f37" radius={[0, 0, 0, 0]} />
+                <Bar dataKey="pipeline" name="Pipeline" stackId="a" fill="#0E51E4" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="empty">No production amounts have been recorded for {monthLabel}.</div>
+          )}
         </div>
       </div>
 
@@ -104,26 +155,26 @@ export default function ProductionPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((c) => {
-                const a = advisorMap.get(c.advisorId);
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="muted">No production records for this filter in {monthLabel}.</td>
+                </tr>
+              ) : rows.map((entry) => {
+                const name = advisorName(entry.firstName, entry.lastName);
                 return (
-                  <tr key={c.id}>
+                  <tr key={entry.id}>
                     <td>
-                      {a ? (
-                        <Link to={`/advisors/${a.id}`} className="cell-user">
-                          <Avatar name={a.name} color={a.avatarColor} size={26} />
-                          <span className="nm">{a.name}</span>
-                        </Link>
-                      ) : (
-                        c.advisorId
-                      )}
+                      <Link to={`/advisors/${entry.userId}`} className="cell-user">
+                        <Avatar name={name} color={avatarColorFor(entry.userId)} size={26} />
+                        <span className="nm">{name}</span>
+                      </Link>
                     </td>
-                    <td style={{ fontWeight: 600 }}>{c.clientName}</td>
-                    <td>{c.product}</td>
-                    <td className="muted">{formatDate(c.submittedAt)}</td>
-                    <td className="muted">{c.issuedAt ? formatDate(c.issuedAt) : '—'}</td>
-                    <td className="num">{formatZAR(c.issuedCommission ?? c.potentialCommission)}</td>
-                    <td><Pill tone={c.status === 'issued' ? 'green' : 'amber'}>{c.status}</Pill></td>
+                    <td style={{ fontWeight: 600 }}>{entry.contactName || entry.title}</td>
+                    <td>{entry.productName || '—'}</td>
+                    <td className="muted">{formatDate(entry.submittedAt)}</td>
+                    <td className="muted">{entry.issuedAt ? formatDate(entry.issuedAt) : '—'}</td>
+                    <td className="num">{formatZAR(entry.amount)}</td>
+                    <td><Pill tone={entry.isIssued ? 'green' : 'amber'}>{entry.isIssued ? 'issued' : 'submitted'}</Pill></td>
                   </tr>
                 );
               })}

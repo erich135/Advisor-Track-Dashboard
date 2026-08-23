@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "description": "AdvisorTrack Director/Admin web dashboard (internal creation-team tool)",
+  "description": "AdvisorTrack Management Portal",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

@@ -21,6 +21,7 @@ export type AuthSession = {
   permissions: string[];
   reportsToUserId: string | null;
   isPlatformAdmin: boolean;
+  hierarchy: CompanyMe['hierarchy'] | null;
 };
 
 type AuthSnapshot = {
@@ -87,6 +88,7 @@ function toSession(
     permissions: companyMe?.permissions ?? [],
     reportsToUserId: companyMe?.reportsToUserId ?? null,
     isPlatformAdmin: companyMe?.isPlatformAdmin ?? false,
+    hierarchy: companyMe?.hierarchy ?? null,
   };
 }
 
@@ -173,7 +175,7 @@ export function toAuthErrorMessage(error: unknown): string {
     if (error.code === 'EMAIL_NOT_VERIFIED') {
       return 'Your email is not verified yet. Check your inbox for the verification code, then try again.';
     }
-    if (error.code === 'INVALID_CREDENTIALS' || error.status === 401) {
+    if (error.code === 'INVALID_CREDENTIALS') {
       return 'Invalid email or password.';
     }
     if (error.code === 'NETWORK_ERROR') {

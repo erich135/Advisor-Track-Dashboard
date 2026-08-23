@@ -1,236 +1,189 @@
 import { useMemo, useState } from 'react';
-import { CreditCard, Users, Clock, AlertTriangle, Ban } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { CreditCard, PlayCircle, UserPlus } from 'lucide-react';
 import { ApiError } from '../api/apiClient';
-import { getCompanyMembers, type CompanyMember } from '../api/companyApi';
+import { listPlatformSubscriptions } from '../api/platformApi';
+import { PageIntro, Pill, SkeletonRows, StatCard } from '../components/ui';
+import { formatDate, formatZAR } from '../lib/format';
 import { useAsync } from '../lib/useAsync';
 import { useAuth } from '../lib/useAuth';
-import { Avatar, Pill, StatCard, SkeletonRows, PageIntro } from '../components/ui';
-
-const AVATAR_COLORS = ['#0E51E4', '#8957e5', '#2da44e', '#bf8700', '#cf222e', '#020921', '#1a7f37'];
-
-type AbelSubStatus = 'active' | 'trialing' | 'grace' | 'expired' | 'cancelled';
-type FilterTab = 'all' | AbelSubStatus;
-
-const STATUS_TABS: { key: FilterTab; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'active', label: 'Active' },
-  { key: 'trialing', label: 'Trialing' },
-  { key: 'grace', label: 'Grace' },
-  { key: 'expired', label: 'Expired' },
-  { key: 'cancelled', label: 'Cancelled' },
-];
+import { SubscriptionEditor } from './subscriptionEditor';
 
 const statusTone: Record<string, string> = {
   active: 'green',
-  trialing: 'amber',
-  grace: 'amber',
-  expired: 'red',
+  suspended: 'amber',
   cancelled: 'grey',
+  Active: 'green',
+  Inactive: 'grey',
+  draft: 'grey',
+  sent: 'blue',
+  overdue: 'red',
+  paid: 'green',
+  voided: 'amber',
 };
 
-function memberName(m: CompanyMember): string {
-  return `${m.firstName ?? ''} ${m.lastName ?? ''}`.trim() || m.email;
+function poolLabel(value: number | null | undefined): string {
+  return value == null ? 'Unlimited' : String(value);
 }
 
-function avatarColorFor(id: string): string {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = (hash + id.charCodeAt(i) * (i + 1)) % 997;
-  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+function priceLabel(cents: number | null | undefined, currency = 'ZAR'): string {
+  if (cents == null) return '—';
+  if (currency === 'ZAR') return formatZAR(cents / 100);
+  return `${currency} ${(cents / 100).toFixed(2)}`;
 }
 
-function normalizeStatus(raw: string | undefined | null): string | null {
-  if (!raw?.trim()) return null;
-  return raw.trim().toLowerCase();
-}
-
-function hasPlan(m: CompanyMember): boolean {
-  return Boolean(m.subscription);
-}
-
-function statusOf(m: CompanyMember): string | null {
-  return normalizeStatus(m.subscription?.status);
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof ApiError ? error.message : fallback;
 }
 
 export default function SubscriptionsPage() {
   const { session } = useAuth();
-  const members = useAsync(() => getCompanyMembers());
-  const [tab, setTab] = useState<FilterTab>('all');
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const companyName = session?.company?.name || session?.organisation?.name || null;
+  const list = useAsync(() => listPlatformSubscriptions(), [refreshKey]);
 
   const stats = useMemo(() => {
-    const list = members.data ?? [];
-    let withPlan = 0;
-    let active = 0;
-    let trialing = 0;
-    let grace = 0;
-    for (const m of list) {
-      if (!hasPlan(m)) continue;
-      withPlan += 1;
-      const status = statusOf(m);
-      if (status === 'active') active += 1;
-      else if (status === 'trialing') trialing += 1;
-      else if (status === 'grace') grace += 1;
-    }
-    return { withPlan, active, trialing, grace };
-  }, [members.data]);
+    const companies = list.data?.companies ?? [];
+    return {
+      customers: companies.length,
+      active: companies.filter((row) => row.subscriptionStatus === 'active').length,
+      assigned: companies.reduce((sum, row) => sum + row.licencePool.assigned, 0),
+    };
+  }, [list.data]);
 
-  const rows = useMemo(() => {
-    const list = members.data ?? [];
-    if (tab === 'all') return list;
-    return list.filter((m) => statusOf(m) === tab);
-  }, [members.data, tab]);
+  const refresh = () => setRefreshKey((value) => value + 1);
 
-  if (members.loading && !members.data) {
-    return <SkeletonRows rows={8} cols={5} />;
-  }
-
-  if (members.error && !members.data) {
-    const message =
-      members.error instanceof ApiError
-        ? members.error.message
-        : 'Unable to load subscriptions. Please try again.';
+  if (!session?.isPlatformAdmin) {
     return (
       <>
-        <PageIntro>
-          Subscription plans and statuses for members in your access scope.
-        </PageIntro>
+        <PageIntro>Internal subscription administration is limited to AdvisorTrack staff.</PageIntro>
         <div className="card">
-          <div className="empty" style={{ color: 'var(--red)' }}>{message}</div>
+          <div className="empty">You do not have access to customer subscription controls.</div>
         </div>
       </>
     );
   }
 
-  const all = members.data ?? [];
+  if (list.loading && !list.data) {
+    return <SkeletonRows rows={8} cols={6} />;
+  }
+
+  if (list.error && !list.data) {
+    return (
+      <>
+        <PageIntro>Customer subscription records administered by AdvisorTrack.</PageIntro>
+        <div className="card">
+          <div className="empty" style={{ color: 'var(--red)' }}>
+            {errorMessage(list.error, 'Unable to load subscriptions.')}
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  const companies = list.data?.companies ?? [];
 
   return (
     <>
       <PageIntro>
-        Subscription plans and statuses for members in your access scope
-        {companyName ? ` · ${companyName}` : ''}.
-        Plan names come from each member’s Abel subscription snapshot — not invoices or billed amounts.
+        Internal customer subscriptions. Purchased quantity can only be changed here. Customers
+        allocate licences from the purchased pool and cannot increase it themselves.
       </PageIntro>
 
-      <div className="grid grid-4">
+      <div className="grid grid-3">
         <StatCard
-          label="Members with plan"
-          value={stats.withPlan}
-          icon={<Users size={18} />}
+          label="Customer subscriptions"
+          value={stats.customers}
+          icon={<CreditCard size={18} />}
           iconBg="var(--brand-soft)"
           iconColor="var(--brand)"
         />
         <StatCard
           label="Active"
           value={stats.active}
-          icon={<CreditCard size={18} />}
+          icon={<PlayCircle size={18} />}
           iconBg="var(--green-soft)"
           iconColor="var(--green)"
         />
         <StatCard
-          label="Trialing"
-          value={stats.trialing}
-          icon={<Clock size={18} />}
-          iconBg="var(--amber-soft)"
-          iconColor="var(--amber)"
-        />
-        <StatCard
-          label="Grace"
-          value={stats.grace}
-          icon={<AlertTriangle size={18} />}
-          iconBg="var(--red-soft)"
-          iconColor="var(--red)"
+          label="Assigned licences"
+          value={stats.assigned}
+          icon={<UserPlus size={18} />}
+          iconBg="var(--purple-soft)"
+          iconColor="var(--purple)"
         />
       </div>
 
-      <div className="wrap-gap" style={{ margin: '20px 0 14px' }}>
-        {STATUS_TABS.map((t) => {
-          const count =
-            t.key === 'all'
-              ? all.length
-              : all.filter((m) => statusOf(m) === t.key).length;
-          return (
-            <button
-              key={t.key}
-              type="button"
-              className={`btn sm ${tab === t.key ? 'primary' : ''}`}
-              onClick={() => setTab(t.key)}
-            >
-              {t.label} ({count})
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="card">
+      <div className="card" style={{ marginTop: 16 }}>
         <div className="table-wrap">
           <table className="data">
             <thead>
               <tr>
-                <th>Member</th>
-                <th>Plan</th>
+                <th>Customer</th>
                 <th>Status</th>
-                {companyName ? <th>Company</th> : null}
+                <th>Plan</th>
+                <th>Licence price</th>
+                <th>Purchased</th>
+                <th>Assigned</th>
+                <th>Available</th>
+                <th>Billing cycle</th>
+                <th>Start</th>
+                <th>Renewal</th>
+                <th>VAT</th>
+                <th>Billing contact</th>
+                <th>Account</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((m) => {
-                const name = memberName(m);
-                const status = statusOf(m);
-                const planName = m.subscription?.name?.trim() || m.subscription?.slug || null;
-                return (
-                  <tr key={m.id}>
-                    <td>
-                      <span className="cell-user">
-                        <Avatar name={name} color={avatarColorFor(m.id)} />
-                        <div>
-                          <div className="nm">{name}</div>
-                          <div className="sm">{m.email}</div>
-                        </div>
-                      </span>
-                    </td>
-                    <td>
-                      {planName ? (
-                        <div>
-                          <div>{planName}</div>
-                          {m.subscription?.slug ? (
-                            <div className="subtle" style={{ fontSize: 12 }}>{m.subscription.slug}</div>
-                          ) : null}
-                        </div>
-                      ) : (
-                        <span className="subtle">—</span>
-                      )}
-                    </td>
-                    <td>
-                      {status ? (
-                        <Pill tone={statusTone[status] ?? 'grey'}>
-                          {status === 'cancelled' ? (
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                              <Ban size={12} /> {status}
-                            </span>
-                          ) : (
-                            status
-                          )}
-                        </Pill>
-                      ) : (
-                        <span className="subtle">—</span>
-                      )}
-                    </td>
-                    {companyName ? <td>{companyName}</td> : null}
-                  </tr>
-                );
-              })}
-              {all.length === 0 && (
-                <tr>
-                  <td colSpan={companyName ? 4 : 3}>
-                    <div className="empty">No members to show for your role yet.</div>
+              {companies.map((row) => (
+                <tr
+                  key={row.company.id}
+                  className="row-link"
+                  onClick={() => setSelectedId(row.company.id)}
+                  style={selectedId === row.company.id ? { background: 'var(--brand-soft)' } : undefined}
+                >
+                  <td style={{ fontWeight: 600 }}>
+                    <Link
+                      to={`/companies/${row.company.id}`}
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      {row.company.name}
+                    </Link>
+                  </td>
+                  <td>
+                    <Pill tone={statusTone[row.subscriptionStatus] ?? 'grey'}>{row.subscriptionStatus}</Pill>
+                  </td>
+                  <td>{row.plan?.name ?? '—'}</td>
+                  <td>{priceLabel(row.licencePriceCents, row.currency)}</td>
+                  <td>{poolLabel(row.licencePool.purchased)}</td>
+                  <td>{row.licencePool.assigned}</td>
+                  <td>{poolLabel(row.licencePool.available)}</td>
+                  <td>{row.billingCycle ?? '—'}</td>
+                  <td className="muted">{row.subscriptionStartedAt ? formatDate(row.subscriptionStartedAt) : '—'}</td>
+                  <td className="muted">{row.nextBillingAt ? formatDate(row.nextBillingAt) : '—'}</td>
+                  <td>{row.vatTreatment.label}</td>
+                  <td>
+                    {row.billingContact?.name || row.billingContact?.email ? (
+                      <div>
+                        <div>{row.billingContact.name || '—'}</div>
+                        {row.billingContact.email ? (
+                          <div className="subtle" style={{ fontSize: 12 }}>{row.billingContact.email}</div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      '—'
+                    )}
+                  </td>
+                  <td>
+                    <Pill tone={statusTone[row.accountStatus] ?? 'grey'}>{row.accountStatus}</Pill>
                   </td>
                 </tr>
-              )}
-              {all.length > 0 && rows.length === 0 && (
+              ))}
+              {companies.length === 0 && (
                 <tr>
-                  <td colSpan={companyName ? 4 : 3}>
-                    <div className="empty">No members match this status filter.</div>
+                  <td colSpan={13}>
+                    <div className="empty">No customer subscriptions to show.</div>
                   </td>
                 </tr>
               )}
@@ -238,6 +191,8 @@ export default function SubscriptionsPage() {
           </table>
         </div>
       </div>
+
+      {selectedId ? <SubscriptionEditor companyId={selectedId} onUpdated={refresh} /> : null}
     </>
   );
 }

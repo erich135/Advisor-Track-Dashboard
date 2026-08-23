@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useState } from 'react';
 import {
   ResponsiveContainer,
   BarChart,
@@ -12,17 +13,25 @@ import {
   Legend,
   CartesianGrid,
 } from 'recharts';
-import { AlertCircle, BadgeCheck, Clock3, ListChecks, Users } from 'lucide-react';
+import { AlertCircle, BadgeCheck, Clock3, ListChecks, TrendingDown, TrendingUp, Users } from 'lucide-react';
 import { getCompanyMembers, type CompanyMember } from '../api/companyApi';
 import {
+  getManagementPerformance,
   getManagementProductionSummary,
+  type ManagementPerformancePeriod,
+  type ManagementPerformer,
   type ManagementProductionAdvisor,
 } from '../api/managementApi';
 import { useAsync } from '../lib/useAsync';
-import { Avatar, Progress, SkeletonRows } from '../components/ui';
+import { useAuth } from '../lib/useAuth';
+import { hasLeadershipPortalAccess } from '../lib/portalAccess';
+import { Avatar, Button, EmptyState, Progress, SkeletonRows } from '../components/ui';
 import { formatNumber, formatZAR } from '../lib/format';
 
-const STATUS_COLORS = ['#0E51E4', '#9A6700'];
+const ISSUED_COLOR = '#0E51E4';
+const NOT_YET_ISSUED_COLOR = '#38BDF8';
+const NOT_YET_ISSUED_SOFT = '#E0F2FE';
+const STATUS_COLORS = [ISSUED_COLOR, NOT_YET_ISSUED_COLOR];
 const AVATAR_COLORS = ['#0E51E4', '#8250df', '#1a7f37', '#9a6700', '#020921'];
 
 function getLocalMonth(): string {
@@ -64,6 +73,42 @@ function accessContext(member?: CompanyMember): string {
   return [role, access].filter(Boolean).join(' · ') || 'In management scope';
 }
 
+const PERIODS: { id: ManagementPerformancePeriod; label: string }[] = [
+  { id: 'last_week', label: 'Last Week' },
+  { id: 'last_month', label: 'Last Month' },
+  { id: 'year_to_date', label: 'Year to Date' },
+];
+
+function PerformerBlock({
+  title,
+  tone,
+  performer,
+  emptyMessage,
+}: {
+  title: 'Top Performer' | 'Needs Attention';
+  tone: 'top' | 'needs-attention';
+  performer: ManagementPerformer | null;
+  emptyMessage: string | null;
+}) {
+  return (
+    <div className={`card card-pad performer-card ${tone}`}>
+      <div className="performer-card-label">
+        {tone === 'top' ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
+        <span>{title}</span>
+      </div>
+      {performer ? (
+        <>
+          <div className="performer-card-name">{performer.name}</div>
+          <div className="performer-card-role">{performer.role}</div>
+          <div className="performer-card-value">{formatZAR(performer.issuedAmount)}</div>
+        </>
+      ) : (
+        <div className="performer-card-empty">{emptyMessage || 'No issued cases for selected period'}</div>
+      )}
+    </div>
+  );
+}
+
 function ManagementStatCard({
   label,
   value,
@@ -94,20 +139,39 @@ function ManagementStatCard({
 }
 
 export default function DashboardPage() {
+  const { session } = useAuth();
+  const leadershipAccess = hasLeadershipPortalAccess(session);
+  const [period, setPeriod] = useState<ManagementPerformancePeriod>('last_month');
   const month = getLocalMonth();
   const monthLabel = formatMonth(month);
+  const performance = useAsync(
+    () => (leadershipAccess ? getManagementPerformance(period) : Promise.resolve(null)),
+    [period, leadershipAccess, session?.user.id],
+  );
   const dashboard = useAsync(
     async () => {
+      if (!leadershipAccess) return null;
       const [members, production] = await Promise.all([
         getCompanyMembers(),
         getManagementProductionSummary(month),
       ]);
       return { members, production };
     },
-    [month],
+    [month, leadershipAccess, session?.user.id],
   );
 
-  if (dashboard.loading) {
+  if (!leadershipAccess) {
+    return (
+      <div className="card">
+        <EmptyState title="Use the AdvisorTrack app">
+          Financial Advisors work in the Android app. This management portal is for Executives,
+          Regional Managers, and Team Leaders.
+        </EmptyState>
+      </div>
+    );
+  }
+
+  if (dashboard.loading || performance.loading) {
     return <SkeletonRows rows={6} cols={4} />;
   }
 
@@ -148,6 +212,43 @@ export default function DashboardPage() {
   return (
     <>
       <p className="page-intro" style={{ marginTop: 0 }}>
+        Issued Rand value of cases that reached Issued, compared for the {performance.data?.comparisonRole ?? 'leadership'} level in your authorised scope.
+      </p>
+
+      <div className="row" style={{ gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+        {PERIODS.map((item) => (
+          <Button
+            key={item.id}
+            type="button"
+            variant={period === item.id ? 'primary' : 'secondary'}
+            onClick={() => setPeriod(item.id)}
+          >
+            {item.label}
+          </Button>
+        ))}
+      </div>
+
+      <div className="performer-grid">
+        <PerformerBlock
+          title="Top Performer"
+          tone="top"
+          performer={performance.data?.topPerformer ?? null}
+          emptyMessage={
+            performance.data?.emptyReason === 'no_subordinates' ||
+            performance.data?.emptyReason === 'no_issued_cases'
+              ? performance.data.emptyMessage ?? 'No issued cases for selected period'
+              : performance.data?.emptyMessage ?? null
+          }
+        />
+        <PerformerBlock
+          title="Needs Attention"
+          tone="needs-attention"
+          performer={performance.data?.worstPerformer ?? null}
+          emptyMessage={performance.data?.emptyMessage ?? 'No issued cases for selected period'}
+        />
+      </div>
+
+      <p className="page-intro">
         AdvisorTrack-recorded advisor production for {monthLabel}. These figures are not SaaS billing revenue or insurer-reconciled revenue.
       </p>
 
@@ -173,8 +274,8 @@ export default function DashboardPage() {
           value={formatZAR(production.nonIssuedAmount)}
           detail={`${pluraliseEntries(production.nonIssuedCount)} not yet issued`}
           icon={<Clock3 size={18} />}
-          iconBg="var(--amber-soft)"
-          iconColor="var(--amber)"
+          iconBg={NOT_YET_ISSUED_SOFT}
+          iconColor={NOT_YET_ISSUED_COLOR}
         />
         <ManagementStatCard
           label="Production Entries"
@@ -187,7 +288,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-3" style={{ marginTop: 16 }}>
-        <div className="card" style={{ gridColumn: 'span 2' }}>
+        <div className="card production-chart-card">
           <div className="card-head">
             <h3>Production by advisor — current month</h3>
             <span className="hint">{monthLabel}</span>
@@ -201,8 +302,8 @@ export default function DashboardPage() {
                   <YAxis tick={{ fontSize: 12, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
                   <Tooltip formatter={(value: number) => formatZAR(value)} contentStyle={{ borderRadius: 10, border: '1px solid var(--border)', fontSize: 13 }} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
-                  <Bar dataKey="issued" name="Issued Production" fill="#0E51E4" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="nonIssued" name="Not Yet Issued" fill="#9A6700" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="issued" name="Issued Production" fill={ISSUED_COLOR} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="nonIssued" name="Not Yet Issued" fill={NOT_YET_ISSUED_COLOR} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -248,8 +349,8 @@ export default function DashboardPage() {
 
       <div className="card" style={{ marginTop: 16 }}>
         <div className="card-head">
-          <h3>Top performers</h3>
-          <span className="hint">Ranked by issued, then not-yet-issued production</span>
+          <h3>Advisor production in scope</h3>
+          <span className="hint">Recorded issued and not-yet-issued production</span>
         </div>
         {rankedAdvisors.length > 0 ? (
           <div className="table-wrap">

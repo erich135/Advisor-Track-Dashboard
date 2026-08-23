@@ -22,6 +22,30 @@ export type ManagementProductionSummary = {
   advisors: ManagementProductionAdvisor[];
 };
 
+export type ManagementProductionEntry = {
+  id: string;
+  userId: string;
+  firstName: string;
+  lastName: string;
+  contactName: string | null;
+  title: string;
+  productName: string | null;
+  amount: number;
+  isIssued: boolean;
+  applicationStatus: string | null;
+  submittedAt: string;
+  issuedAt: string | null;
+};
+
+export type ManagementProductionEntries = {
+  period: string;
+  issuedAmount: number;
+  issuedCount: number;
+  nonIssuedAmount: number;
+  nonIssuedCount: number;
+  entries: ManagementProductionEntry[];
+};
+
 export type ManagementPipelineFilters = {
   advisorId?: string;
   stage?: string;
@@ -79,6 +103,15 @@ export async function getManagementProductionSummary(
   );
 }
 
+/** Case-level production rows for the same month and scope as the summary. */
+export async function getManagementProductionEntries(
+  month: string,
+): Promise<ManagementProductionEntries> {
+  return apiRequest<ManagementProductionEntries>(
+    `/management/production/entries?month=${encodeURIComponent(month)}`,
+  );
+}
+
 /** Real case pipeline limited by the authenticated user's management scope. */
 export async function getManagementPipeline(
   filters: ManagementPipelineFilters = {},
@@ -92,5 +125,37 @@ export async function getManagementPipeline(
   const queryString = query.toString();
   return apiRequest<ManagementPipelineResponse>(
     `/management/pipeline${queryString ? `?${queryString}` : ''}`,
+  );
+}
+
+export type ManagementPerformancePeriod = 'last_week' | 'last_month' | 'year_to_date';
+
+export type ManagementPerformer = {
+  userId: string;
+  name: string;
+  role: string;
+  issuedAmount: number;
+};
+
+export type ManagementPerformanceResponse = {
+  period: ManagementPerformancePeriod;
+  periodLabel: string;
+  periodStart: string;
+  periodEnd: string;
+  timezone: string;
+  comparisonRole: string | null;
+  scopeKind: 'organisation' | 'region' | 'team';
+  topPerformer: ManagementPerformer | null;
+  worstPerformer: ManagementPerformer | null;
+  emptyReason: 'no_subordinates' | 'no_issued_cases' | 'single_subordinate' | 'tied' | null;
+  emptyMessage: string | null;
+};
+
+/** Issued-performance Top/Worst Performer for the authenticated leadership scope. */
+export async function getManagementPerformance(
+  period: ManagementPerformancePeriod = 'last_month',
+): Promise<ManagementPerformanceResponse> {
+  return apiRequest<ManagementPerformanceResponse>(
+    `/management/performance?period=${encodeURIComponent(period)}`,
   );
 }
