@@ -80,6 +80,21 @@
 }
 
 /* ---------- Print ---------- */
+@media (max-width: 720px) {
+  .inv-head,
+  .inv-parties {
+    flex-direction: column;
+  }
+  .inv-title,
+  .inv-dates {
+    text-align: left;
+  }
+  .inv-totals {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+
 @media print {
   body * { visibility: hidden; }
   #invoice-print, #invoice-print * { visibility: visible; }

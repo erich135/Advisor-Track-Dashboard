@@ -11,11 +11,19 @@ import {
   BarChart3,
   UserCog,
   LogOut,
+  FileText,
+  History,
 } from 'lucide-react';
+import { BrandLogo } from './BrandLogo';
 import { Avatar } from './ui';
 import { users } from '../data/seed';
 import { useAuth } from '../lib/useAuth';
 import { useDemoSession } from '../lib/demoSession';
+import {
+  hasLeadershipPortalAccess,
+  isCustomerExecutive,
+  isCustomerPeopleManager,
+} from '../lib/portalAccess';
 
 interface NavEntry {
   to: string;
@@ -33,6 +41,7 @@ const primaryNav: NavEntry[] = [
 
 const businessNav: NavEntry[] = [
   { to: '/subscriptions', label: 'Subscriptions', icon: <CreditCard size={18} /> },
+  { to: '/invoices', label: 'Invoices', icon: <FileText size={18} /> },
   { to: '/companies', label: 'Companies', icon: <Building2 size={18} /> },
 ];
 
@@ -44,6 +53,7 @@ const adminNav: NavEntry[] = [
 /** Founders-only nav (reports etc.) — shown above admin section. */
 const managementNav: NavEntry[] = [
   { to: '/performance', label: 'Performance', icon: <BarChart3 size={18} /> },
+  { to: '/audit', label: 'Audit', icon: <History size={18} /> },
 ];
 
 function NavList({ items }: { items: NavEntry[] }) {
@@ -66,19 +76,21 @@ function NavList({ items }: { items: NavEntry[] }) {
 }
 
 const titles: Record<string, { title: string; sub: string }> = {
-  '/': { title: 'Dashboard', sub: 'Business overview across all advisors' },
+  '/': { title: 'Dashboard', sub: 'Leadership issued-performance overview' },
   '/team-pipeline': { title: 'Team Pipeline', sub: 'Management-scoped client cases' },
   '/team-pipeline-demo': { title: 'Team Pipeline', sub: 'Seeded ASI demo data only' },
   '/advisors': { title: 'Advisors', sub: 'Everyone using AdvisorTrack' },
   '/production': { title: 'Production', sub: 'Submitted vs issued commission' },
-  '/subscriptions': { title: 'Subscriptions', sub: 'Licenses, trials & renewals' },
-  '/companies': { title: 'Companies', sub: 'Corporate license pools' },
-  '/invoices': { title: 'Invoices', sub: 'Billing & PDF generation' },
+  '/subscriptions': { title: 'Subscriptions', sub: 'Customer plans, licences & billing' },
+  '/companies': { title: 'Companies', sub: 'Corporate licence pools' },
+  '/invoices': { title: 'Invoices', sub: 'Billing, PDF & invoice delivery' },
+  '/audit': { title: 'Audit', sub: 'Internal administrative history' },
   '/support': { title: 'Support', sub: 'Customer queries & tickets' },
   '/performance': { title: 'Performance', sub: 'Team and advisor operational performance' },
   '/reports': { title: 'Performance', sub: 'Team and advisor operational performance' },
-  '/users': { title: 'Users & Access', sub: 'Company admins and team managers' },
+  '/users': { title: 'Users & Access', sub: 'People in your authorised management scope' },
   '/settings': { title: 'Settings & Roles', sub: 'Team access and permissions' },
+  '/not-found': { title: 'Page not found', sub: 'This address is not part of the Management Portal' },
 };
 
 export default function Layout({ children }: { children: ReactNode }) {
@@ -87,14 +99,21 @@ export default function Layout({ children }: { children: ReactNode }) {
   const { signOut, session } = useAuth();
   const { selectedDemoUser, resetDemoUser } = useDemoSession();
   const isDemoRoute = pathname.startsWith('/team-pipeline-demo');
+  const prefixKey = Object.keys(titles)
+    .filter((key) => key !== '/' && key !== '/not-found' && pathname.startsWith(key))
+    .sort((left, right) => right.length - left.length)[0];
   const matchKey =
-    Object.keys(titles)
-      .filter((k) => k !== '/' && pathname.startsWith(k))
-      .sort((a, b) => b.length - a.length)[0] ?? '/';
+    pathname.startsWith('/companies/') && pathname !== '/companies'
+      ? '/customer-account'
+      : pathname === '/'
+        ? '/'
+        : prefixKey ?? '/not-found';
   const header =
     isDemoRoute && selectedDemoUser
       ? { title: 'Team Pipeline', sub: `${selectedDemoUser.name} · ${selectedDemoUser.role}` }
-      : titles[matchKey];
+      : matchKey === '/customer-account'
+        ? { title: 'Customer account', sub: 'Connected subscription, users, licences and invoices' }
+        : titles[matchKey] ?? titles['/not-found'];
 
   if (isDemoRoute && !selectedDemoUser) {
     return <>{children}</>;
@@ -105,8 +124,9 @@ export default function Layout({ children }: { children: ReactNode }) {
     ? `${session.user.firstName ?? ''} ${session.user.lastName ?? ''}`.trim() || session.user.email
     : me.name;
   const sessionRole =
+    session?.hierarchy?.label ||
     session?.role?.name ||
-    (session?.isPlatformAdmin ? 'Platform admin' : null) ||
+    (session?.isPlatformAdmin ? 'App Admin' : null) ||
     'AdvisorTrack user';
   const profile = isDemoRoute ? selectedDemoUser! : { ...me, name: sessionName };
   const profileRole = isDemoRoute ? selectedDemoUser!.role : sessionRole;
@@ -116,13 +136,17 @@ export default function Layout({ children }: { children: ReactNode }) {
   const demoNav: NavEntry[] = isFounderDemo
     ? [...primaryNav, ...businessNav, ...managementNav, ...adminNav]
     : [{ to: '/team-pipeline-demo', label: 'Team Pipeline', icon: <FolderKanban size={18} /> }];
+  const leadershipAccess = hasLeadershipPortalAccess(session);
+  const customerAdminNav: NavEntry[] = [
+    ...(isCustomerPeopleManager(session) ? [adminNav[0]] : []),
+    ...(isCustomerExecutive(session) || session?.isPlatformAdmin ? [adminNav[1]] : []),
+  ].filter((item, index, list) => list.findIndex((entry) => entry.to === item.to) === index);
 
   return (
     <div className="app-shell">
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <img className="sidebar-logo" src="/brand/logo-on-dark.svg" alt="AdvisorTrack" />
-          <div className="tag">{isDemoRoute && selectedDemoUser ? selectedDemoUser.role : 'Admin Console'}</div>
+          <BrandLogo variant="on-dark" className="sidebar-logo" />
         </div>
 
         <nav>
@@ -142,7 +166,7 @@ export default function Layout({ children }: { children: ReactNode }) {
               <div className="nav-section-label">Admin</div>
               <NavList items={adminNav} />
             </>
-          ) : (
+          ) : session?.isPlatformAdmin ? (
             <>
               <div className="nav-section-label">Overview</div>
               <NavList items={primaryNav} />
@@ -153,6 +177,22 @@ export default function Layout({ children }: { children: ReactNode }) {
               <div className="nav-section-label">Admin</div>
               <NavList items={adminNav} />
             </>
+          ) : leadershipAccess ? (
+            <>
+              <div className="nav-section-label">Overview</div>
+              <NavList items={primaryNav} />
+              {customerAdminNav.length > 0 ? (
+                <>
+                  <div className="nav-section-label">Admin</div>
+                  <NavList items={customerAdminNav} />
+                </>
+              ) : null}
+            </>
+          ) : (
+            <>
+              <div className="nav-section-label">Overview</div>
+              <NavList items={[{ to: '/', label: 'Dashboard', icon: <LayoutDashboard size={18} /> }]} />
+            </>
           )}
         </nav>
 
@@ -161,7 +201,11 @@ export default function Layout({ children }: { children: ReactNode }) {
           <div className="meta">
             <div className="n">{profile.name}</div>
             <div className="r">{profileRole}</div>
-            {isDemoRoute ? <div className="r" style={{ fontSize: 11 }}>{profileSub}</div> : null}
+            {isDemoRoute ? (
+              <div className="r" style={{ fontSize: 11 }}>
+                {profileSub}
+              </div>
+            ) : null}
           </div>
           <button
             onClick={() => {
@@ -186,7 +230,9 @@ export default function Layout({ children }: { children: ReactNode }) {
             }}
           >
             <LogOut size={16} />
-            <span style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{isDemoRoute ? 'Switch demo user' : 'Sign out'}</span>
+            <span style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+              {isDemoRoute ? 'Switch demo user' : 'Sign out'}
+            </span>
           </button>
         </div>
       </aside>

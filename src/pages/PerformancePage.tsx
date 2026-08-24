@@ -18,6 +18,9 @@ import { Avatar, PageIntro, Progress, SkeletonRows } from '../components/ui';
 import { formatNumber, formatZAR } from '../lib/format';
 import { useAsync } from '../lib/useAsync';
 
+const ISSUED_COLOR = '#0E51E4';
+const NOT_YET_ISSUED_COLOR = '#38BDF8';
+const NOT_YET_ISSUED_SOFT = '#E0F2FE';
 const AVATAR_COLORS = ['#0E51E4', '#8250df', '#1a7f37', '#9a6700', '#020921'];
 
 function currentMonth(): string {
@@ -157,8 +160,8 @@ export default function PerformancePage() {
           value={formatZAR(data.nonIssuedAmount)}
           detail={`${entryLabel(data.nonIssuedCount)} not yet issued`}
           icon={<TimerReset size={18} />}
-          iconBg="var(--amber-soft)"
-          iconColor="var(--amber)"
+          iconBg={NOT_YET_ISSUED_SOFT}
+          iconColor={NOT_YET_ISSUED_COLOR}
         />
         <PerformanceStatCard
           label="Goal Coverage"
@@ -200,8 +203,8 @@ export default function PerformancePage() {
                   contentStyle={{ borderRadius: 10, border: '1px solid var(--border)', fontSize: 13 }}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="issued" name="Issued" fill="#0E51E4" radius={[0, 4, 4, 0]} />
-                <Bar dataKey="notYetIssued" name="Not Yet Issued" fill="#9A6700" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="issued" name="Issued" fill={ISSUED_COLOR} radius={[0, 4, 4, 0]} />
+                <Bar dataKey="notYetIssued" name="Not Yet Issued" fill={NOT_YET_ISSUED_COLOR} radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
