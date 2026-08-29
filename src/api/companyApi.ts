@@ -70,6 +70,7 @@ export type CompanyMember = {
   isPlatformAdmin: boolean;
   isActive: boolean;
   lastLoginAt?: string | null;
+  lastMobileActivityAt?: string | null;
   subscription: CompanyMemberSubscription | null;
   licenceStatus: 'Licensed' | 'Unlicensed';
   accountStatus: 'Active' | 'Inactive';

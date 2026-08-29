@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Search, UserPlus } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { ApiError } from '../api/apiClient';
 import { getCompanyMembers, type CompanyMember } from '../api/companyApi';
 import { useAsync } from '../lib/useAsync';
@@ -126,7 +127,9 @@ export default function AdvisorsPage() {
                       <div className="cell-user">
                         <Avatar name={name} color={avatarColorFor(m.id)} />
                         <div>
-                          <div className="nm">{name}</div>
+                          <div className="nm">
+                            <Link to={`/advisors/${m.id}`} className="table-link">{name}</Link>
+                          </div>
                           <div className="sm">{m.email}</div>
                         </div>
                       </div>
