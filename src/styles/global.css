@@ -606,6 +606,24 @@ textarea.input:focus {
   .form-grid.cols-2 { grid-template-columns: 1fr; }
 }
 
+.engineering-entry-detail {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 6px 16px;
+  margin-top: 14px;
+  font-size: 13px;
+}
+.engineering-entry-detail dt {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+.engineering-entry-detail dd {
+  margin: 0;
+}
+@media (max-width: 720px) {
+  .engineering-entry-detail { grid-template-columns: 1fr; }
+}
+
 /* ---------- Modal / confirmation ---------- */
 .modal-overlay,
 .drawer-overlay {

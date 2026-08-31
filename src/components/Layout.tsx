@@ -13,6 +13,7 @@ import {
   LogOut,
   FileText,
   History,
+  ClipboardList,
 } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
 import { Avatar } from './ui';
@@ -56,6 +57,10 @@ const managementNav: NavEntry[] = [
   { to: '/audit', label: 'Audit', icon: <History size={18} /> },
 ];
 
+const engineeringNav: NavEntry[] = [
+  { to: '/engineering/changelog', label: 'Change Log', icon: <ClipboardList size={18} /> },
+];
+
 function NavList({ items }: { items: NavEntry[] }) {
   return (
     <>
@@ -90,6 +95,10 @@ const titles: Record<string, { title: string; sub: string }> = {
   '/reports': { title: 'Performance', sub: 'Team and advisor operational performance' },
   '/users': { title: 'Users & Access', sub: 'People in your authorised management scope' },
   '/settings': { title: 'Settings & Roles', sub: 'Team access and permissions' },
+  '/engineering/changelog': {
+    title: 'Engineering Change Log',
+    sub: 'Pinned decisions and recent internal changes',
+  },
   '/not-found': { title: 'Page not found', sub: 'This address is not part of the Management Portal' },
 };
 
@@ -194,6 +203,12 @@ export default function Layout({ children }: { children: ReactNode }) {
               <NavList items={[{ to: '/', label: 'Dashboard', icon: <LayoutDashboard size={18} /> }]} />
             </>
           )}
+          {!isDemoRoute && session?.canAccessEngineeringChangelog ? (
+            <>
+              <div className="nav-section-label">Engineering</div>
+              <NavList items={engineeringNav} />
+            </>
+          ) : null}
         </nav>
 
         <div className="sidebar-foot">

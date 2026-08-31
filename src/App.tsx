@@ -17,6 +17,8 @@ import PerformancePage from './pages/PerformancePage';
 import UsersPage from './pages/UsersPage';
 import SettingsPage from './pages/SettingsPage';
 import NotFoundPage from './pages/NotFoundPage';
+import EngineeringChangelogPage from './pages/EngineeringChangelogPage';
+import { PermissionDenied } from './components/PermissionDenied';
 import { useAuth } from './lib/useAuth';
 import {
   hasLeadershipPortalAccess,
@@ -43,6 +45,14 @@ function RequireExecutive({ children }: { children: ReactNode }) {
   const { session } = useAuth();
   if (!session?.isPlatformAdmin && !isCustomerExecutive(session)) {
     return <Navigate to="/" replace />;
+  }
+  return children;
+}
+
+function RequireEngineeringChangelog({ children }: { children: ReactNode }) {
+  const { session } = useAuth();
+  if (!session?.canAccessEngineeringChangelog) {
+    return <PermissionDenied />;
   }
   return children;
 }
@@ -156,6 +166,14 @@ export default function App() {
             <RequireExecutive>
               <SettingsPage />
             </RequireExecutive>
+          }
+        />
+        <Route
+          path="/engineering/changelog"
+          element={
+            <RequireEngineeringChangelog>
+              <EngineeringChangelogPage />
+            </RequireEngineeringChangelog>
           }
         />
         <Route path="*" element={<NotFoundPage />} />

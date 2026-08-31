@@ -12,6 +12,7 @@ export type CompanyMe = {
   permissions: string[];
   reportsToUserId: string | null;
   isPlatformAdmin: boolean;
+  canAccessEngineeringChangelog?: boolean;
   hierarchy?: {
     rank: 'platform_admin' | 'executive' | 'regional_manager' | 'team_leader' | 'financial_advisor';
     label: string;
