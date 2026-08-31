@@ -12,6 +12,7 @@ export type CompanyMe = {
   permissions: string[];
   reportsToUserId: string | null;
   isPlatformAdmin: boolean;
+  canAccessEngineeringChangelog?: boolean;
   hierarchy?: {
     rank: 'platform_admin' | 'executive' | 'regional_manager' | 'team_leader' | 'financial_advisor';
     label: string;
@@ -70,6 +71,7 @@ export type CompanyMember = {
   isPlatformAdmin: boolean;
   isActive: boolean;
   lastLoginAt?: string | null;
+  lastMobileActivityAt?: string | null;
   subscription: CompanyMemberSubscription | null;
   licenceStatus: 'Licensed' | 'Unlicensed';
   accountStatus: 'Active' | 'Inactive';

@@ -21,6 +21,7 @@ export type AuthSession = {
   permissions: string[];
   reportsToUserId: string | null;
   isPlatformAdmin: boolean;
+  canAccessEngineeringChangelog: boolean;
   hierarchy: CompanyMe['hierarchy'] | null;
 };
 
@@ -88,6 +89,7 @@ function toSession(
     permissions: companyMe?.permissions ?? [],
     reportsToUserId: companyMe?.reportsToUserId ?? null,
     isPlatformAdmin: companyMe?.isPlatformAdmin ?? false,
+    canAccessEngineeringChangelog: Boolean(companyMe?.canAccessEngineeringChangelog),
     hierarchy: companyMe?.hierarchy ?? null,
   };
 }
