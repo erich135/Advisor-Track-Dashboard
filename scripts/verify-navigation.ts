@@ -157,6 +157,8 @@ assert.equal(faNav.length, 1);
 const platformTos = flattenNavTos(platformNav);
 assert.equal(platformTos.includes('/enterprise-customers'), false);
 assert.equal(platformTos.includes('/licence-requests'), false);
+assert.equal(platformTos.includes('/bulk-import'), false);
+assert.equal(platformTos.includes('/subscription'), false);
 assert.ok(platformTos.includes('/companies'));
 assert.ok(platformTos.includes('/subscriptions'));
 assert.ok(platformTos.includes('/performance'));

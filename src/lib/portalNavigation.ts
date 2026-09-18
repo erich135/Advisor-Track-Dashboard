@@ -146,11 +146,11 @@ export function buildPlatformNav(session: AuthSession | null): PortalNavSection[
   const organisationItems: PortalNavItem[] = [{ to: '/licences', label: 'Licences' }];
   if (schemaEnabled) {
     organisationItems.push({ to: '/subscription', label: 'Subscription' });
+    pushIf(
+      organisationItems,
+      canBulkImportMembers(session) ? { to: '/bulk-import', label: 'Bulk Import' } : null,
+    );
   }
-  pushIf(
-    organisationItems,
-    canBulkImportMembers(session) ? { to: '/bulk-import', label: 'Bulk Import' } : null,
-  );
 
   const platformItems: PortalNavItem[] = schemaEnabled
     ? [
