@@ -14,25 +14,27 @@ import {
   CartesianGrid,
 } from 'recharts';
 import { AlertCircle, BadgeCheck, Clock3, ListChecks, TrendingDown, TrendingUp, Users } from 'lucide-react';
-import { getCompanyMembers, type CompanyMember } from '../api/companyApi';
+import { getCompanyMembers } from '../api/companyApi';
 import {
   getManagementPerformance,
   getManagementProductionSummary,
   type ManagementPerformancePeriod,
   type ManagementPerformer,
-  type ManagementProductionAdvisor,
 } from '../api/managementApi';
 import { useAsync } from '../lib/useAsync';
 import { useAuth } from '../lib/useAuth';
 import { hasLeadershipPortalAccess } from '../lib/portalAccess';
-import { Avatar, Button, EmptyState, Progress, SkeletonRows } from '../components/ui';
+import { AdvisorNameLink } from '../components/AdvisorNameLink';
+import { AdvisorProductionTable, advisorDisplayName } from '../components/AdvisorProductionTable';
+import { Button, EmptyState, SkeletonRows } from '../components/ui';
 import { formatNumber, formatZAR } from '../lib/format';
+import { sessionCompanyName } from '../lib/companyContext';
+import { DASHBOARD_RETURN_PATH } from '../lib/pipelineReturnPath';
 
 const ISSUED_COLOR = '#0E51E4';
 const NOT_YET_ISSUED_COLOR = '#38BDF8';
 const NOT_YET_ISSUED_SOFT = '#E0F2FE';
 const STATUS_COLORS = [ISSUED_COLOR, NOT_YET_ISSUED_COLOR];
-const AVATAR_COLORS = ['#0E51E4', '#8250df', '#1a7f37', '#9a6700', '#020921'];
 
 function getLocalMonth(): string {
   const now = new Date();
@@ -48,29 +50,6 @@ function formatMonth(month: string): string {
 
 function pluraliseEntries(count: number): string {
   return `${formatNumber(count)} ${count === 1 ? 'entry' : 'entries'}`;
-}
-
-function avatarColorFor(id: string): string {
-  let hash = 0;
-  for (let index = 0; index < id.length; index += 1) {
-    hash = (hash * 31 + id.charCodeAt(index)) | 0;
-  }
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
-}
-
-function advisorName(advisor: ManagementProductionAdvisor, member?: CompanyMember): string {
-  const summaryName = `${advisor.firstName ?? ''} ${advisor.lastName ?? ''}`.trim();
-  if (summaryName) return summaryName;
-  const memberName = `${member?.firstName ?? ''} ${member?.lastName ?? ''}`.trim();
-  return memberName || 'Advisor';
-}
-
-function accessContext(member?: CompanyMember): string {
-  const role = member?.role?.name;
-  const access = member?.subscription?.status
-    ? `${member.subscription.status.charAt(0).toUpperCase()}${member.subscription.status.slice(1)} access`
-    : null;
-  return [role, access].filter(Boolean).join(' · ') || 'In management scope';
 }
 
 const PERIODS: { id: ManagementPerformancePeriod; label: string }[] = [
@@ -98,7 +77,13 @@ function PerformerBlock({
       </div>
       {performer ? (
         <>
-          <div className="performer-card-name">{performer.name}</div>
+          <div className="performer-card-name">
+            <AdvisorNameLink
+              advisorId={performer.userId}
+              name={performer.name}
+              returnPath={DASHBOARD_RETURN_PATH}
+            />
+          </div>
           <div className="performer-card-role">{performer.role}</div>
           <div className="performer-card-value">{formatZAR(performer.issuedAmount)}</div>
         </>
@@ -161,11 +146,13 @@ export default function DashboardPage() {
   );
 
   if (!leadershipAccess) {
+    const companyName = sessionCompanyName(session);
     return (
       <div className="card">
         <EmptyState title="Use the AdvisorTrack app">
-          Financial Advisors work in the Android app. This management portal is for Executives,
-          Regional Managers, and Team Leaders.
+          {companyName
+            ? `You are signed in to ${companyName}. Financial Advisors work in the Android app. This management portal is for Executives, Regional Managers, and Team Leaders.`
+            : 'Financial Advisors work in the Android app. This management portal is for Executives, Regional Managers, and Team Leaders.'}
         </EmptyState>
       </div>
     );
@@ -191,6 +178,7 @@ export default function DashboardPage() {
 
   const { members, production } = dashboard.data;
   const membersById = new Map(members.map((member) => [member.id, member]));
+  const companyName = sessionCompanyName(session);
   const totalEntries = production.issuedCount + production.nonIssuedCount;
   const totalAmount = production.issuedAmount + production.nonIssuedAmount;
   const hasProductionAmounts = totalAmount > 0;
@@ -204,7 +192,7 @@ export default function DashboardPage() {
       right.nonIssuedAmount - left.nonIssuedAmount,
   );
   const advisorChart = rankedAdvisors.map((advisor) => ({
-    advisor: advisorName(advisor, membersById.get(advisor.userId)),
+    advisor: advisorDisplayName(advisor, membersById.get(advisor.userId)),
     issued: advisor.issuedAmount,
     nonIssued: advisor.nonIssuedAmount,
   }));
@@ -212,6 +200,7 @@ export default function DashboardPage() {
   return (
     <>
       <p className="page-intro" style={{ marginTop: 0 }}>
+        {companyName ? `${companyName}. ` : ''}
         Issued Rand value of cases that reached Issued, compared for the {performance.data?.comparisonRole ?? 'leadership'} level in your authorised scope.
       </p>
 
@@ -353,56 +342,7 @@ export default function DashboardPage() {
           <span className="hint">Recorded issued and not-yet-issued production</span>
         </div>
         {rankedAdvisors.length > 0 ? (
-          <div className="table-wrap">
-            <table className="data">
-              <thead>
-                <tr>
-                  <th>Advisor</th>
-                  <th className="num">Issued</th>
-                  <th className="num">Not Yet Issued</th>
-                  <th className="num">Goal</th>
-                  <th style={{ width: 180 }}>Attainment</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rankedAdvisors.map((advisor) => {
-                  const member = membersById.get(advisor.userId);
-                  const name = advisorName(advisor, member);
-                  return (
-                    <tr key={advisor.userId}>
-                      <td>
-                        <div className="cell-user">
-                          <Avatar name={name} color={avatarColorFor(advisor.userId)} />
-                          <div>
-                            <div className="nm">{name}</div>
-                            <div className="sm">{accessContext(member)}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="num">{formatZAR(advisor.issuedAmount)}</td>
-                      <td className="num">{formatZAR(advisor.nonIssuedAmount)}</td>
-                      <td className="num">{advisor.goalAmount == null ? '—' : formatZAR(advisor.goalAmount)}</td>
-                      <td>
-                        {advisor.attainmentPercent == null ? (
-                          <span className="subtle">—</span>
-                        ) : (
-                          <div className="row" style={{ gap: 8 }}>
-                            <Progress
-                              value={advisor.attainmentPercent}
-                              color={advisor.attainmentPercent >= 100 ? 'var(--green)' : undefined}
-                            />
-                            <span className="subtle" style={{ minWidth: 46, textAlign: 'right' }}>
-                              {advisor.attainmentPercent.toFixed(0)}%
-                            </span>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <AdvisorProductionTable advisors={rankedAdvisors} membersById={membersById} />
         ) : (
           <div className="empty">No advisors are available in the current management scope.</div>
         )}

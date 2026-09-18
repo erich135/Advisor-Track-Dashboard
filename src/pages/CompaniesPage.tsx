@@ -7,6 +7,7 @@ import { useAsync } from '../lib/useAsync';
 import { useAuth } from '../lib/useAuth';
 import { Pill, Progress, StatCard, SkeletonRows, PageIntro } from '../components/ui';
 import { formatDate } from '../lib/format';
+import { isEnterpriseSchemaEnabled } from '../lib/enterpriseSchema';
 
 type CompanyCardModel = {
   id: string;
@@ -193,6 +194,13 @@ export default function CompaniesPage() {
           ? 'All organisations on the platform. Open a customer to see users, subscription, licences and invoices together.'
           : 'Your organisation. Member counts are occupancy; seat capacity is informational only.'}
       </PageIntro>
+      {mode === 'platform' && isEnterpriseSchemaEnabled() ? (
+        <div className="row" style={{ marginBottom: 16 }}>
+          <Link className="btn primary" to="/enterprise-customers">
+            Enterprise customers
+          </Link>
+        </div>
+      ) : null}
 
       <div className="grid grid-3">
         {mode === 'platform' ? (

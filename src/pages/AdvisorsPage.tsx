@@ -1,12 +1,16 @@
 import { useMemo, useState } from 'react';
 import { Search, UserPlus } from 'lucide-react';
-import { Link } from 'react-router-dom';
 import { ApiError } from '../api/apiClient';
 import { getCompanyMembers, type CompanyMember } from '../api/companyApi';
+import { AdvisorNameLink } from '../components/AdvisorNameLink';
 import { useAsync } from '../lib/useAsync';
 import { useAuth } from '../lib/useAuth';
+import { StickyHorizontalScroll } from '../components/StickyHorizontalScroll';
 import { Avatar, Pill, SkeletonRows, PageIntro } from '../components/ui';
 import { formatDate } from '../lib/format';
+import { ADVISORS_RETURN_PATH } from '../lib/pipelineReturnPath';
+import { sessionCompanyName } from '../lib/companyContext';
+import { CompanyContextBanner } from '../components/CompanyContext';
 
 const AVATAR_COLORS = ['#0E51E4', '#8957e5', '#2da44e', '#bf8700', '#cf222e', '#020921', '#1a7f37'];
 
@@ -31,7 +35,7 @@ export default function AdvisorsPage() {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all');
 
-  const companyLabel = session?.company?.name || session?.organisation?.name || null;
+  const companyLabel = sessionCompanyName(session);
 
   const rows = useMemo(() => {
     const list = members.data ?? [];
@@ -81,6 +85,7 @@ export default function AdvisorsPage() {
       <PageIntro>
         Every advisor on the platform.
       </PageIntro>
+      <CompanyContextBanner name={companyLabel} />
 
       <div className="row between" style={{ marginBottom: 16 }}>
         <div className="row" style={{ gap: 10 }}>
@@ -104,7 +109,7 @@ export default function AdvisorsPage() {
       </div>
 
       <div className="card">
-        <div className="table-wrap">
+        <StickyHorizontalScroll>
           <table className="data">
             <thead>
               <tr>
@@ -128,7 +133,11 @@ export default function AdvisorsPage() {
                         <Avatar name={name} color={avatarColorFor(m.id)} />
                         <div>
                           <div className="nm">
-                            <Link to={`/advisors/${m.id}`} className="table-link">{name}</Link>
+                            <AdvisorNameLink
+                              advisorId={m.id}
+                              name={name}
+                              returnPath={ADVISORS_RETURN_PATH}
+                            />
                           </div>
                           <div className="sm">{m.email}</div>
                         </div>
@@ -175,7 +184,7 @@ export default function AdvisorsPage() {
               )}
             </tbody>
           </table>
-        </div>
+        </StickyHorizontalScroll>
       </div>
     </>
   );

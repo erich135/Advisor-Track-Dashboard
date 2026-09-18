@@ -21,12 +21,19 @@ import {
   listPlatformSubscriptions,
   markPlatformInvoicePaid,
   sendPlatformInvoice,
+  issuePlatformInvoice,
+  getInvoicePrefill,
   updatePlatformDraftInvoice,
   voidPlatformInvoice,
   type CompanyBillingProfile,
   type InvoiceDetail,
   type InvoiceSummary,
 } from '../api/platformApi';
+import {
+  downloadCompanyInvoicePdf,
+  getCompanyInvoice,
+  listCompanyInvoices,
+} from '../api/companyApi';
 import { CustomerFormFields } from '../components/forms';
 import { InvoiceDocument, invoiceDetailToPreview, type InvoicePreviewModel } from '../components/InvoiceDocument';
 import {
@@ -42,7 +49,9 @@ import {
   TextInput,
   useToast,
 } from '../components/ui';
+import { StickyHorizontalScroll } from '../components/StickyHorizontalScroll';
 import { formatDate, formatZAR } from '../lib/format';
+import { isEnterpriseSchemaEnabled } from '../lib/enterpriseSchema';
 import {
   calculateInvoiceTotals,
   calculateLine,
@@ -52,6 +61,8 @@ import {
 } from '../lib/invoiceMoney';
 import { useAsync } from '../lib/useAsync';
 import { useAuth } from '../lib/useAuth';
+import { sellerChargesVat } from '../lib/advisortrackVat';
+import { canViewCompanyInvoices } from '../lib/portalAccess';
 import '../styles/invoice.css';
 
 type DraftLine = {
@@ -158,6 +169,7 @@ const computedLines = (lines: DraftLine[], vatRegistered: boolean) =>
 export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: string }) {
   const { session } = useAuth();
   const toast = useToast();
+  const customerMode = !session?.isPlatformAdmin && !lockedCompanyId;
   const [refreshKey, setRefreshKey] = useState(0);
   const [view, setView] = useState<'list' | 'edit' | 'detail'>('list');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -175,6 +187,11 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
     invoiceDate: todayIso(),
     dueDate: addDays(todayIso(), 30),
     poNumber: '',
+    customerReference: '',
+    billingPeriodStart: '',
+    billingPeriodEnd: '',
+    sourceContractId: '',
+    attachBillingAdjustmentIds: [] as string[],
     notes: '',
   });
   const [billing, setBilling] = useState<BillingValues>({
@@ -195,37 +212,70 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
   const [lines, setLines] = useState<DraftLine[]>([emptyLine(false)]);
   const [paymentTerms, setPaymentTerms] = useState('Payment due within 30 days.');
 
-  const list = useAsync(() => listPlatformInvoices(lockedCompanyId), [refreshKey, lockedCompanyId]);
-  const customers = useAsync(() => listPlatformSubscriptions(), []);
+  const list = useAsync(
+    () => (customerMode ? listCompanyInvoices() : listPlatformInvoices(lockedCompanyId)),
+    [refreshKey, lockedCompanyId, customerMode]
+  );
+  const customers = useAsync(
+    () => (customerMode ? Promise.resolve({ companies: [], packages: [] }) : listPlatformSubscriptions()),
+    [customerMode]
+  );
   const detail = useAsync(async () => {
     if (!selectedId || view !== 'detail') return null;
-    return getPlatformInvoice(selectedId);
-  }, [selectedId, view, refreshKey]);
+    return customerMode ? getCompanyInvoice(selectedId) : getPlatformInvoice(selectedId);
+  }, [selectedId, view, refreshKey, customerMode]);
 
   const invoices = list.data?.invoices ?? [];
   const selected = detail.data ?? null;
-  const vatRegistered = billing.vatRegistered === 'true';
+  const chargeVat = sellerChargesVat() && billing.vatRegistered === 'true';
 
   const liveTotals = useMemo(() => {
     try {
-      return calculateInvoiceTotals(computedLines(lines, vatRegistered));
+      return calculateInvoiceTotals(computedLines(lines, chargeVat));
     } catch {
       return null;
     }
-  }, [lines, vatRegistered]);
+  }, [lines, chargeVat]);
 
   useEffect(() => {
-    if (view !== 'edit' || !companyId || editingId) return;
+    if (customerMode || view !== 'edit' || !companyId || editingId) return;
     let active = true;
-    getPlatformBillingProfile(companyId)
-      .then((profile) => {
+    Promise.all([getPlatformBillingProfile(companyId), getInvoicePrefill(companyId).catch(() => null)])
+      .then(([profile, prefill]) => {
         if (!active) return;
         setBilling(billingFromProfile(profile));
+        if (prefill) {
+          setMeta((current) => ({
+            ...current,
+            customer: prefill.companyName || profile.registeredName || profile.company.name,
+            invoiceDate: prefill.invoiceDate,
+            dueDate: prefill.dueDate,
+            poNumber: prefill.poReference ?? '',
+            customerReference: prefill.customerReference ?? '',
+            billingPeriodStart: prefill.billingPeriodStart ?? '',
+            billingPeriodEnd: prefill.billingPeriodEnd ?? '',
+            sourceContractId: prefill.sourceContractId,
+            attachBillingAdjustmentIds: prefill.pendingAdjustmentIds ?? [],
+            notes: prefill.notes ?? '',
+          }));
+          if (prefill.paymentTerms) setPaymentTerms(prefill.paymentTerms);
+          setBilling((current) => ({
+            ...current,
+            billingContact: prefill.billingContactName ?? current.billingContact,
+            billingEmail: prefill.billingEmail ?? current.billingEmail,
+          }));
+          setLines(
+            prefill.lines.map((line) => ({
+              description: line.description,
+              quantity: String(line.quantity),
+              unitPrice: centsToRand(line.unitPriceCents),
+              discount: centsToRand(line.discountCents),
+              vatRatePercent: '0.00',
+            }))
+          );
+          return;
+        }
         setMeta((current) => ({ ...current, customer: profile.registeredName || profile.company.name }));
-        const vat = profile.vatRegistered;
-        const rate = vat
-          ? String(profile.vatRatePercent ?? profile.subscription.vatRatePercent ?? 15)
-          : '0.00';
         const quantity =
           profile.subscription.purchased != null ? String(profile.subscription.purchased) : '1';
         const unitPrice =
@@ -241,7 +291,7 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
             quantity,
             unitPrice,
             discount: '0.00',
-            vatRatePercent: rate,
+            vatRatePercent: '0.00',
           },
         ]);
       })
@@ -251,12 +301,23 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
     return () => {
       active = false;
     };
-  }, [companyId, view, editingId, toast]);
+  }, [companyId, view, editingId, toast, customerMode]);
 
-  if (!session?.isPlatformAdmin) {
+  if (!session?.isPlatformAdmin && !customerMode) {
     return (
       <>
         <PageIntro>Internal invoice administration is limited to AdvisorTrack staff.</PageIntro>
+        <div className="card">
+          <div className="empty">You do not have access to customer invoices.</div>
+        </div>
+      </>
+    );
+  }
+
+  if (customerMode && !canViewCompanyInvoices(session)) {
+    return (
+      <>
+        <PageIntro>Organisation invoices are limited to Organisation Administrators.</PageIntro>
         <div className="card">
           <div className="empty">You do not have access to customer invoices.</div>
         </div>
@@ -285,6 +346,11 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
       invoiceDate: todayIso(),
       dueDate: addDays(todayIso(), 30),
       poNumber: '',
+      customerReference: '',
+      billingPeriodStart: '',
+      billingPeriodEnd: '',
+      sourceContractId: '',
+      attachBillingAdjustmentIds: [],
       notes: '',
     });
     setPaymentTerms('Payment due within 30 days.');
@@ -304,6 +370,11 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
         invoiceDate: invoice.invoiceDate,
         dueDate: invoice.dueDate,
         poNumber: invoice.poReference ?? '',
+        customerReference: invoice.customerReference ?? '',
+        billingPeriodStart: invoice.billingPeriodStart ?? '',
+        billingPeriodEnd: invoice.billingPeriodEnd ?? '',
+        sourceContractId: invoice.sourceContractId ?? '',
+        attachBillingAdjustmentIds: [],
         notes: invoice.notes ?? '',
       });
       setPaymentTerms(invoice.paymentTerms ?? '');
@@ -337,6 +408,14 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
         invoiceDate: meta.invoiceDate,
         dueDate: meta.dueDate,
         poReference: meta.poNumber || null,
+        customerReference: isEnterpriseSchemaEnabled() ? meta.customerReference || null : null,
+        billingPeriodStart: isEnterpriseSchemaEnabled() ? meta.billingPeriodStart || null : null,
+        billingPeriodEnd: isEnterpriseSchemaEnabled() ? meta.billingPeriodEnd || null : null,
+        sourceContractId: isEnterpriseSchemaEnabled() ? meta.sourceContractId || null : null,
+        attachBillingAdjustmentIds:
+          isEnterpriseSchemaEnabled() && meta.attachBillingAdjustmentIds?.length
+            ? meta.attachBillingAdjustmentIds
+            : undefined,
         notes: meta.notes || null,
         paymentTerms: paymentTerms || null,
         billing: toBillingPayload(billing),
@@ -345,7 +424,7 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
           quantity: line.quantity,
           unitPrice: line.unitPrice,
           discount: line.discount || '0',
-          vatRatePercent: vatRegistered ? line.vatRatePercent : '0',
+          vatRatePercent: chargeVat ? line.vatRatePercent : '0',
         })),
       };
       const saved = editingId
@@ -385,7 +464,9 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
   const downloadPdf = async (invoiceId: string) => {
     setBusy(true);
     try {
-      const file = await downloadPlatformInvoicePdf(invoiceId);
+      const file = await (customerMode
+        ? downloadCompanyInvoicePdf(invoiceId)
+        : downloadPlatformInvoicePdf(invoiceId));
       const url = URL.createObjectURL(file.blob);
       const link = document.createElement('a');
       link.href = url;
@@ -410,6 +491,9 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
           invoiceDate: meta.invoiceDate,
           dueDate: meta.dueDate,
           poReference: meta.poNumber,
+          customerReference: meta.customerReference || null,
+          billingPeriodStart: meta.billingPeriodStart || null,
+          billingPeriodEnd: meta.billingPeriodEnd || null,
           notes: meta.notes,
           paymentTerms,
           snapshot: {
@@ -417,7 +501,7 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
             planSlug: null,
             planName: null,
           },
-          lines: computedLines(lines, vatRegistered),
+          lines: computedLines(lines, chargeVat),
           totals: liveTotals,
         };
       } catch {
@@ -429,7 +513,7 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
 
   const preview = previewModel();
 
-  if (view === 'edit') {
+  if (view === 'edit' && !customerMode) {
     return (
       <>
         <PageIntro>Create an internal customer invoice. Totals are calculated automatically and confirmed by the server on save.</PageIntro>
@@ -475,6 +559,14 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
                 onChange={(event) => setMeta((current) => ({ ...current, poNumber: event.target.value }))}
               />
             </Field>
+            {isEnterpriseSchemaEnabled() ? (
+            <Field label="Customer reference">
+              <TextInput
+                value={meta.customerReference}
+                onChange={(event) => setMeta((current) => ({ ...current, customerReference: event.target.value }))}
+              />
+            </Field>
+            ) : null}
             <Field label="Invoice date">
               <DateInput
                 value={meta.invoiceDate}
@@ -487,6 +579,22 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
                 onChange={(event) => setMeta((current) => ({ ...current, dueDate: event.target.value }))}
               />
             </Field>
+            {isEnterpriseSchemaEnabled() ? (
+            <>
+            <Field label="Billing period start">
+              <DateInput
+                value={meta.billingPeriodStart}
+                onChange={(event) => setMeta((current) => ({ ...current, billingPeriodStart: event.target.value }))}
+              />
+            </Field>
+            <Field label="Billing period end">
+              <DateInput
+                value={meta.billingPeriodEnd}
+                onChange={(event) => setMeta((current) => ({ ...current, billingPeriodEnd: event.target.value }))}
+              />
+            </Field>
+            </>
+            ) : null}
             <Field label="Notes">
               <TextInput
                 value={meta.notes}
@@ -507,15 +615,37 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
         <div className="card card-pad" style={{ marginBottom: 16 }}>
           <div className="row between" style={{ marginBottom: 12 }}>
             <h3 className="section-title" style={{ margin: 0 }}>Line items</h3>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => setLines((current) => [...current, emptyLine(vatRegistered)])}
-            >
-              <Plus size={14} /> Add line
-            </Button>
+            <div className="wrap-gap">
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setLines((current) => [...current, emptyLine(chargeVat)])}
+              >
+                <Plus size={14} /> Add line
+              </Button>
+              {isEnterpriseSchemaEnabled() ? (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() =>
+                  setLines((current) => [
+                    ...current,
+                    {
+                      description: 'Negotiated discount',
+                      quantity: '1',
+                      unitPrice: '-10000.00',
+                      discount: '0.00',
+                      vatRatePercent: '0.00',
+                    },
+                  ])
+                }
+              >
+                Add discount line
+              </Button>
+              ) : null}
+            </div>
           </div>
-          <div className="table-wrap">
+          <StickyHorizontalScroll>
             <table className="data">
               <thead>
                 <tr>
@@ -523,7 +653,7 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
                   <th>Qty</th>
                   <th>Unit price (R)</th>
                   <th>Discount (R)</th>
-                  <th>VAT %</th>
+                  {chargeVat ? <th>VAT %</th> : null}
                   <th className="num">Line total</th>
                   <th></th>
                 </tr>
@@ -538,7 +668,7 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
                         quantity: line.quantity || '1',
                         unitPriceCents: line.unitPrice.trim() ? randToCents(line.unitPrice) : 0,
                         discountCents: line.discount.trim() ? randToCents(line.discount) : 0,
-                        vatRatePercent: vatRegistered ? line.vatRatePercent : '0',
+                        vatRatePercent: chargeVat ? line.vatRatePercent : '0',
                       }).lineTotalCents
                     );
                   } catch {
@@ -594,10 +724,10 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
                           }
                         />
                       </td>
+                      {chargeVat ? (
                       <td>
                         <TextInput
-                          value={vatRegistered ? line.vatRatePercent : '0.00'}
-                          disabled={!vatRegistered}
+                          value={line.vatRatePercent}
                           onChange={(event) =>
                             setLines((current) =>
                               current.map((item, itemIndex) =>
@@ -607,6 +737,7 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
                           }
                         />
                       </td>
+                      ) : null}
                       <td className="num">{lineTotal}</td>
                       <td>
                         {lines.length > 1 ? (
@@ -624,11 +755,13 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
                 })}
               </tbody>
             </table>
-          </div>
+          </StickyHorizontalScroll>
           <div className="inv-totals" style={{ marginTop: 16 }}>
-            <div className="inv-total-row"><span>Subtotal</span><span>{liveTotals ? money(liveTotals.subtotalCents) : '—'}</span></div>
-            <div className="inv-total-row"><span>VAT</span><span>{liveTotals ? money(liveTotals.vatCents) : '—'}</span></div>
-            <div className="inv-total-row grand"><span>Total</span><span>{liveTotals ? money(liveTotals.totalCents) : '—'}</span></div>
+            <div className="inv-total-row"><span>Amount</span><span>{liveTotals ? money(liveTotals.subtotalCents) : '—'}</span></div>
+            {chargeVat ? (
+              <div className="inv-total-row"><span>VAT</span><span>{liveTotals ? money(liveTotals.vatCents) : '—'}</span></div>
+            ) : null}
+            <div className="inv-total-row grand"><span>Total due</span><span>{liveTotals ? money(liveTotals.totalCents) : '—'}</span></div>
           </div>
           <div style={{ marginTop: 16 }}>
             <Field label="Notes / payment terms">
@@ -646,19 +779,21 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
 
   if (view === 'detail') {
     if (!selected) return <SkeletonRows rows={6} cols={4} />;
-    const canEdit = selected.status === 'draft';
-    const canSend = selected.status === 'draft';
-    const canResend = selected.status === 'sent' || selected.status === 'paid';
+    const canEdit = selected.status === 'draft' && !customerMode;
+    const canIssue = selected.status === 'draft' && !customerMode;
+    const canSend = selected.status === 'draft' && !customerMode;
+    const canResend = (selected.status === 'sent' || selected.status === 'paid') && !customerMode;
     const lastDelivery = selected.lastDelivery;
     const deliveryFailed = lastDelivery?.status === 'failed';
-    const canPay = selected.status === 'draft' || selected.status === 'sent';
-    const canCancel = selected.status === 'draft' || selected.status === 'sent';
-    const canVoid = selected.status !== 'cancelled' && selected.status !== 'voided';
+    const canPay = (selected.status === 'draft' || selected.status === 'sent') && !customerMode;
+    const canCancel = (selected.status === 'draft' || selected.status === 'sent') && !customerMode;
+    const canVoid = selected.status !== 'cancelled' && selected.status !== 'voided' && !customerMode;
     return (
       <>
         <PageIntro>
-          The PDF is generated from the stored invoice snapshot. Sending emails the same document.
-          Later customer or subscription changes do not alter this record.
+          {customerMode
+            ? 'Your organisation invoices. You can view and download. Commercial terms cannot be changed here.'
+            : 'Draft invoices are editable. Issue Invoice locks the commercial snapshot. Send Invoice emails the same document. Later contract changes do not alter this record.'}
         </PageIntro>
         {deliveryFailed ? (
           <div className="card card-pad" style={{ marginBottom: 16, borderColor: 'var(--red)' }}>
@@ -681,6 +816,21 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
             <Button type="button" onClick={() => { setView('list'); setSelectedId(null); }}>Back</Button>
             {canEdit ? (
               <Button type="button" onClick={() => openEdit(selected.id)} disabled={busy}>Edit Draft</Button>
+            ) : null}
+            {canIssue ? (
+              <Button
+                type="button"
+                variant="primary"
+                disabled={busy}
+                onClick={() =>
+                  runInvoiceAction(
+                    () => issuePlatformInvoice(selected.id),
+                    `Invoice ${selected.invoiceNumber} issued.`
+                  )
+                }
+              >
+                Issue Invoice
+              </Button>
             ) : null}
             <Button type="button" onClick={() => setPreviewOpen(true)} disabled={busy}>Preview</Button>
             <Button type="button" onClick={() => downloadPdf(selected.id)} disabled={busy}>
@@ -721,6 +871,8 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
                 Mark paid
               </Button>
             ) : null}
+            {!customerMode ? (
+            <>
             <Button
               type="button"
               disabled={busy}
@@ -736,6 +888,8 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
             {canVoid ? (
               <Button type="button" disabled={busy} onClick={() => setConfirm('void')}>Void</Button>
             ) : null}
+            </>
+            ) : null}
           </div>
         </div>
         <div className="card" style={{ overflow: 'hidden' }}>
@@ -743,7 +897,7 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
         </div>
         <div className="card card-pad" style={{ marginTop: 16 }}>
           <h3 className="section-title" style={{ marginTop: 0 }}>Delivery history</h3>
-          <div className="table-wrap">
+          <StickyHorizontalScroll>
             <table className="data">
               <thead>
                 <tr>
@@ -788,7 +942,7 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
                 )}
               </tbody>
             </table>
-          </div>
+          </StickyHorizontalScroll>
         </div>
         {previewOpen ? (
           <PreviewDrawer preview={invoiceDetailToPreview(selected)} onClose={() => setPreviewOpen(false)} />
@@ -851,9 +1005,11 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
   return (
     <>
       <PageIntro>
-        {lockedCompanyId
-          ? 'Invoices for this customer. Send Invoice emails the stored snapshot PDF.'
-          : 'Internal invoices for AdvisorTrack customers. Send Invoice emails the stored snapshot PDF.'}
+        {customerMode
+          ? 'Invoices for your organisation. View and download only.'
+          : lockedCompanyId
+            ? 'Invoices for this customer. Drafts stay editable until issued.'
+            : 'Internal invoices for AdvisorTrack customers. Drafts stay editable until issued. Send Invoice emails the stored snapshot PDF.'}
       </PageIntro>
       <div className="grid grid-4">
         <StatCard label="Outstanding" value={money(outstanding)} icon={<FileText size={18} />} iconBg="var(--amber-soft)" iconColor="var(--amber)" />
@@ -864,15 +1020,17 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
 
       <div className="row between" style={{ margin: '20px 0 14px' }}>
         <h3 className="section-title" style={{ margin: 0 }}>
-          {lockedCompanyId ? 'Customer invoices' : 'All invoices'}
+          {customerMode || lockedCompanyId ? 'Customer invoices' : 'All invoices'}
         </h3>
+        {!customerMode ? (
         <Button type="button" variant="primary" onClick={openCreate}>
           <Plus size={16} /> Create invoice
         </Button>
+        ) : null}
       </div>
 
       <div className="card">
-        <div className="table-wrap">
+        <StickyHorizontalScroll>
           <table className="data">
             <thead>
               <tr>
@@ -901,13 +1059,13 @@ export default function InvoicesPage({ lockedCompanyId }: { lockedCompanyId?: st
               {invoices.length === 0 && (
                 <tr>
                   <td colSpan={7}>
-                    <div className="empty">No invoices yet. Create an invoice for a customer.</div>
+                    <div className="empty">{customerMode ? 'No invoices are available for this organisation.' : 'No invoices yet. Create an invoice for a customer.'}</div>
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
-        </div>
+        </StickyHorizontalScroll>
       </div>
     </>
   );

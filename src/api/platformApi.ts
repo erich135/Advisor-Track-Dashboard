@@ -1,5 +1,5 @@
 import { apiDownload, apiRequest } from './apiClient';
-import type { CompanyMember, LicencePool } from './companyApi';
+import type { CompanyMember, CompanyMemberDetail, LicencePool, MemberOffboardingResult } from './companyApi';
 
 export type PlatformCompany = {
   id: string;
@@ -119,6 +119,10 @@ export type InvoiceSummary = {
 
 export type InvoiceDetail = InvoiceSummary & {
   poReference: string | null;
+  customerReference?: string | null;
+  billingPeriodStart?: string | null;
+  billingPeriodEnd?: string | null;
+  sourceContractId?: string | null;
   notes: string | null;
   paymentTerms: string | null;
   snapshot: InvoiceSnapshot;
@@ -128,6 +132,10 @@ export type InvoiceDetail = InvoiceSummary & {
   voidedAt: string | null;
   duplicatedFromInvoiceId: string | null;
   updatedAt: string;
+  editable?: boolean;
+  locked?: boolean;
+  vatCharged?: boolean;
+  sellerVatRegistered?: boolean;
   statusEvents: Array<{
     id: string;
     fromStatus: string | null;
@@ -296,6 +304,12 @@ export type InvoiceWriteBody = {
   poReference?: string | null;
   notes?: string | null;
   paymentTerms?: string | null;
+  billingPeriodStart?: string | null;
+  billingPeriodEnd?: string | null;
+  customerReference?: string | null;
+  sourceContractId?: string | null;
+  attachBillingAdjustmentIds?: string[];
+  attachPendingAdjustments?: boolean;
   billing?: {
     registeredName: string;
     tradingName?: string | null;
@@ -346,6 +360,46 @@ export async function sendPlatformInvoice(invoiceId: string): Promise<InvoiceDet
     method: 'POST',
     body: {},
   });
+}
+
+export async function issuePlatformInvoice(invoiceId: string): Promise<InvoiceDetail> {
+  return apiRequest<InvoiceDetail>(`/platform/invoices/${encodeURIComponent(invoiceId)}/issue`, {
+    method: 'POST',
+    body: {},
+  });
+}
+
+export type InvoiceContractPrefill = {
+  companyId: string;
+  companyName: string;
+  planName: string;
+  invoiceDate: string;
+  dueDate: string;
+  billingPeriodStart: string | null;
+  billingPeriodEnd: string | null;
+  poReference: string | null;
+  customerReference: string | null;
+  paymentTerms: string;
+  notes: string | null;
+  billingContactName: string | null;
+  billingEmail: string | null;
+  sourceContractId: string;
+  pricingBasis: string;
+  billingFrequency: string;
+  lines: Array<{
+    description: string;
+    quantity: number;
+    unitPriceCents: number;
+    discountCents: number;
+  }>;
+  editableSnapshot: true;
+  pendingAdjustmentIds?: string[];
+};
+
+export async function getInvoicePrefill(companyId: string): Promise<InvoiceContractPrefill> {
+  return apiRequest<InvoiceContractPrefill>(
+    `/platform/companies/${encodeURIComponent(companyId)}/invoice-prefill`
+  );
 }
 
 export async function markPlatformInvoicePaid(
@@ -417,9 +471,12 @@ export async function createPlatformCustomerMember(
     reportsToUserId?: string | null;
     regionId?: string | null;
     teamId?: string | null;
+    organisationAdmin?: boolean;
+    assignLicence?: boolean;
+    sendInvitation?: boolean;
   }
 ) {
-  return apiRequest<CompanyMember>(`/platform/customers/${encodeURIComponent(companyId)}/members`, {
+  return apiRequest<CompanyMemberDetail>(`/platform/customers/${encodeURIComponent(companyId)}/members`, {
     method: 'POST',
     body,
   });
@@ -446,6 +503,13 @@ export async function updatePlatformCustomerMember(
   );
 }
 
+export async function deactivatePlatformCustomerMember(companyId: string, memberId: string) {
+  return apiRequest<MemberOffboardingResult>(
+    `/platform/customers/${encodeURIComponent(companyId)}/members/${encodeURIComponent(memberId)}/deactivate`,
+    { method: 'POST' }
+  );
+}
+
 export async function assignPlatformCustomerLicence(companyId: string, memberId: string) {
   return apiRequest<CompanyMember>(
     `/platform/customers/${encodeURIComponent(companyId)}/members/${encodeURIComponent(memberId)}/licence`,
@@ -461,7 +525,12 @@ export async function removePlatformCustomerLicence(companyId: string, memberId:
 }
 
 export async function resendPlatformCustomerInvitation(companyId: string, memberId: string) {
-  return apiRequest<{ sent: boolean; email: string }>(
+  return apiRequest<{
+    sent: boolean;
+    email: string;
+    channel?: 'mobile' | 'portal';
+    activationUrl?: string;
+  }>(
     `/platform/customers/${encodeURIComponent(companyId)}/members/${encodeURIComponent(memberId)}/resend-invitation`,
     { method: 'POST' }
   );
@@ -491,4 +560,209 @@ export async function listPlatformAudit(filters?: {
   if (filters?.resourceType) params.set('resourceType', filters.resourceType);
   const query = params.toString();
   return apiRequest<{ events: AdminAuditEvent[] }>(`/platform/audit${query ? `?${query}` : ''}`);
+}
+
+export type EnterpriseOnboarding = {
+  id: string;
+  companyId: string | null;
+  commercialStatus: string;
+  companyName: string;
+  registrationNumber: string | null;
+  vatRegistered: boolean;
+  vatNumber: string | null;
+  primaryContactName: string | null;
+  primaryContactEmail: string | null;
+  primaryContactMobile: string | null;
+  billingContactName: string | null;
+  billingEmail: string | null;
+  billingMobile: string | null;
+  orgAdmin: {
+    firstName: string | null;
+    lastName: string | null;
+    email: string | null;
+    mobile: string | null;
+    userId: string | null;
+    inviteStatus: string;
+    hierarchyRoleNotRequired: boolean;
+  };
+  purchasedLicences: number | null;
+  contractStartDate: string | null;
+  contractEndDate: string | null;
+  billingModel: string;
+  pricingType: string;
+  negotiatedAmountCents: number | null;
+  paymentTerms: string | null;
+  poReference: string | null;
+  internalNotes: string | null;
+  extraInvoiceLines: Array<{
+    description: string;
+    quantity: number;
+    unitPriceCents: number;
+    discountCents: number;
+  }>;
+  contract?: import('../lib/enterpriseContract').EnterpriseContract | null;
+  invoicePreview: {
+    lines: Array<{
+      description: string;
+      quantity: number;
+      unitPriceCents: number;
+      discountCents: number;
+    }>;
+    draftInvoiceId: string | null;
+    invoiceStatus: string | null;
+    editable: boolean;
+    numberAllocated: boolean;
+  };
+  draftInvoiceId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  alreadyCommitted?: boolean;
+  inviteQueuedLocally?: boolean;
+  emailSent?: boolean;
+  passwordIssued?: boolean;
+  invoice?: InvoiceDetail | null;
+};
+
+export async function listEnterpriseOnboardings(): Promise<EnterpriseOnboarding[]> {
+  return apiRequest<EnterpriseOnboarding[]>('/platform/enterprise-onboardings');
+}
+
+export async function createEnterpriseOnboarding(body: {
+  companyName: string;
+}): Promise<EnterpriseOnboarding> {
+  return apiRequest<EnterpriseOnboarding>('/platform/enterprise-onboardings', {
+    method: 'POST',
+    body,
+  });
+}
+
+export async function getEnterpriseOnboarding(id: string): Promise<EnterpriseOnboarding> {
+  return apiRequest<EnterpriseOnboarding>(`/platform/enterprise-onboardings/${encodeURIComponent(id)}`);
+}
+
+export async function patchEnterpriseOnboarding(
+  id: string,
+  body: Record<string, unknown>
+): Promise<EnterpriseOnboarding> {
+  return apiRequest<EnterpriseOnboarding>(`/platform/enterprise-onboardings/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body,
+  });
+}
+
+export async function commitEnterpriseCompany(id: string): Promise<EnterpriseOnboarding> {
+  return apiRequest<EnterpriseOnboarding>(
+    `/platform/enterprise-onboardings/${encodeURIComponent(id)}/commit-company`,
+    { method: 'POST', body: {} }
+  );
+}
+
+export async function createEnterpriseDraftInvoice(id: string): Promise<{
+  onboarding: EnterpriseOnboarding;
+  invoice: InvoiceDetail;
+  allocatedNewNumber: boolean;
+}> {
+  return apiRequest(`/platform/enterprise-onboardings/${encodeURIComponent(id)}/draft-invoice`, {
+    method: 'POST',
+    body: {},
+  });
+}
+
+export async function queueEnterpriseOrgAdminInvite(id: string): Promise<EnterpriseOnboarding> {
+  return apiRequest<EnterpriseOnboarding>(
+    `/platform/enterprise-onboardings/${encodeURIComponent(id)}/queue-org-admin-invite`,
+    { method: 'POST', body: {} }
+  );
+}
+
+export async function getEnterpriseContract(companyId: string) {
+  return apiRequest<import('../lib/enterpriseContract').EnterpriseContract>(
+    `/platform/companies/${encodeURIComponent(companyId)}/enterprise-contract`
+  );
+}
+
+export async function patchEnterpriseContract(
+  companyId: string,
+  body: Record<string, unknown>
+) {
+  return apiRequest<import('../lib/enterpriseContract').EnterpriseContract>(
+    `/platform/companies/${encodeURIComponent(companyId)}/enterprise-contract`,
+    { method: 'PATCH', body }
+  );
+}
+
+export async function listEnterpriseContractEvents(companyId: string) {
+  return apiRequest<
+    Array<{
+      id: string;
+      contractId: string;
+      eventType: string;
+      changedFields: Record<string, unknown>;
+      actorUserId: string | null;
+      note: string | null;
+      createdAt: string;
+    }>
+  >(`/platform/companies/${encodeURIComponent(companyId)}/enterprise-contract/events`);
+}
+
+export async function listPlatformOrganisationAdmins(companyId: string) {
+  return apiRequest<Array<{ id: string; companyId: string; userId: string; status: string; grantedAt: string }>>(
+    `/platform/companies/${encodeURIComponent(companyId)}/organisation-admins`
+  );
+}
+
+export async function grantPlatformOrganisationAdmin(companyId: string, userId: string) {
+  return apiRequest<{ id: string; companyId: string; userId: string; status: string; grantedAt: string }>(
+    `/platform/companies/${encodeURIComponent(companyId)}/organisation-admins`,
+    { method: 'POST', body: { userId } }
+  );
+}
+
+export type StaffLicenceIncreaseRequest = {
+  id: string;
+  companyId: string;
+  companyName: string | null;
+  currentPurchased: number | null;
+  additionalRequested: number;
+  proposedTotal: number | null;
+  status: string;
+  statusLabel?: string;
+  billingTreatment: string | null;
+  billingTreatmentLabel: string | null;
+  requestedByName: string | null;
+  requestedAt: string;
+  notes: string | null;
+  decisionNotes: string | null;
+  assigned?: number;
+  available?: number | null;
+  alreadyApplied?: boolean;
+  conflict?: { current: number | null; expected: number | null } | null;
+};
+
+export async function listPlatformLicenceRequests(): Promise<{ requests: StaffLicenceIncreaseRequest[] }> {
+  return apiRequest<{ requests: StaffLicenceIncreaseRequest[] }>('/platform/licence-requests');
+}
+
+export async function getPlatformLicenceRequest(requestId: string): Promise<StaffLicenceIncreaseRequest> {
+  return apiRequest<StaffLicenceIncreaseRequest>(`/platform/licence-requests/${encodeURIComponent(requestId)}`);
+}
+
+export async function approvePlatformLicenceRequest(
+  requestId: string,
+  body?: { notes?: string | null; amountCents?: number | null }
+): Promise<StaffLicenceIncreaseRequest> {
+  return apiRequest<StaffLicenceIncreaseRequest>(
+    `/platform/licence-requests/${encodeURIComponent(requestId)}/approve`,
+    { method: 'POST', body: body ?? {} }
+  );
+}
+
+export async function rejectPlatformLicenceRequest(
+  requestId: string,
+  notes?: string | null
+): Promise<StaffLicenceIncreaseRequest> {
+  return apiRequest<StaffLicenceIncreaseRequest>(
+    `/platform/licence-requests/${encodeURIComponent(requestId)}/reject`,
+    { method: 'POST', body: { notes: notes ?? null } }
+  );
 }

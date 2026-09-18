@@ -17,6 +17,7 @@ import { TrendingUp, Wallet, Users, ArrowUpRight, ArrowDownRight, Lock } from 'l
 import { seedDataService as db } from '../data/seedDataService';
 import { useAsync } from '../lib/useAsync';
 import { StatCard, SkeletonRows, Pill } from '../components/ui';
+import { StickyHorizontalScroll } from '../components/StickyHorizontalScroll';
 import { formatZAR, formatNumber, formatPercent } from '../lib/format';
 import { mrr, arr, activeSubscribers, trialCount } from '../lib/analytics';
 
@@ -230,7 +231,7 @@ export default function ReportsPage() {
           <h3>Company revenue contribution</h3>
           <span className="hint">MRR by corporate pool</span>
         </div>
-        <div className="table-wrap">
+        <StickyHorizontalScroll>
           <table className="data">
             <thead>
               <tr>
@@ -274,7 +275,7 @@ export default function ReportsPage() {
               </tr>
             </tbody>
           </table>
-        </div>
+        </StickyHorizontalScroll>
       </div>
 
       {/* Summary stat strip */}

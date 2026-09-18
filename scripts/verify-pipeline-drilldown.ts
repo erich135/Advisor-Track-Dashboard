@@ -1,8 +1,15 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { isFinancialAdvisor } from '../src/lib/financialAdvisors';
 import { pipelineProgressLabel, pipelineProgressStates } from '../src/lib/pipelineProgress';
 import { readPipelineQuery, teamPipelinePath, writePipelineQuery } from '../src/lib/pipelineQuery';
-import { advisorDetailsPath, parsePipelineReturnPath } from '../src/lib/pipelineReturnPath';
+import {
+  advisorDetailsPath,
+  parseAdvisorReturnPath,
+  parsePipelineReturnPath,
+  advisorReturnBackLabel,
+} from '../src/lib/pipelineReturnPath';
 import type { CompanyMember } from '../src/api/companyApi';
 
 const advisor = {
@@ -47,7 +54,11 @@ assert.equal(
 
 const returnPath = `/team-pipeline?advisor=${advisor.id}&stage=Implementation`;
 assert.equal(parsePipelineReturnPath(returnPath), returnPath);
+assert.equal(parseAdvisorReturnPath('/advisors'), '/advisors');
+assert.equal(parseAdvisorReturnPath('/'), '/');
+assert.equal(parseAdvisorReturnPath('/advisors/not-list'), null);
 assert.equal(parsePipelineReturnPath('/advisors'), null);
+assert.equal(parsePipelineReturnPath('/'), null);
 assert.equal(parsePipelineReturnPath('https://evil.example/team-pipeline'), null);
 assert.equal(parsePipelineReturnPath('//evil.example/team-pipeline'), null);
 assert.equal(parsePipelineReturnPath('javascript:alert(1)'), null);
@@ -56,7 +67,17 @@ assert.equal(
   advisorDetailsPath(advisor.id, returnPath),
   `/advisors/${advisor.id}?return=${encodeURIComponent(returnPath)}`
 );
-assert.equal(advisorDetailsPath(advisor.id, '/advisors'), `/advisors/${advisor.id}`);
+assert.equal(
+  advisorDetailsPath(advisor.id, '/advisors'),
+  `/advisors/${advisor.id}?return=${encodeURIComponent('/advisors')}`
+);
+assert.equal(
+  advisorDetailsPath(advisor.id, '/'),
+  `/advisors/${advisor.id}?return=${encodeURIComponent('/')}`
+);
+assert.equal(advisorReturnBackLabel('/'), 'Back to Dashboard');
+assert.equal(advisorReturnBackLabel('/advisors'), 'Back to advisors');
+assert.equal(advisorReturnBackLabel(returnPath), 'Back to Team Pipeline');
 
 assert.deepEqual(pipelineProgressStates('Recommendation'), [
   'complete',
@@ -67,5 +88,36 @@ assert.deepEqual(pipelineProgressStates('Recommendation'), [
   'future',
 ]);
 assert.match(pipelineProgressLabel('Recommendation'), /stage 4 of 6/);
+
+const frontendRoot = process.cwd();
+const app = fs.readFileSync(path.join(frontendRoot, 'src/App.tsx'), 'utf8');
+assert.match(app, /path="\/advisors\/:id"/);
+assert.match(app, /AdvisorDetailPage/);
+
+const pipelinePage = fs.readFileSync(path.join(frontendRoot, 'src/pages/TeamPipelinePage.tsx'), 'utf8');
+assert.match(pipelinePage, /financialAdvisorsInScope/);
+assert.match(pipelinePage, /writePipelineQuery/);
+assert.match(pipelinePage, /AdvisorNameLink/);
+assert.match(pipelinePage, /returnPath/);
+assert.match(pipelinePage, /PipelineStageGraphic/);
+
+const detailsPage = fs.readFileSync(path.join(frontendRoot, 'src/pages/AdvisorDetailPage.tsx'), 'utf8');
+assert.match(detailsPage, /Last Mobile Activity/);
+assert.match(detailsPage, /Needs Attention/);
+assert.match(detailsPage, /Pipeline distribution/i);
+assert.match(detailsPage, /Issued This Month/);
+assert.match(detailsPage, /No mobile activity recorded yet/);
+assert.match(detailsPage, /parseAdvisorReturnPath/);
+assert.match(detailsPage, /advisorReturnBackLabel/);
+assert.match(detailsPage, /Current cases/i);
+
+const advisorsPage = fs.readFileSync(path.join(frontendRoot, 'src/pages/AdvisorsPage.tsx'), 'utf8');
+assert.match(advisorsPage, /AdvisorNameLink/);
+assert.match(advisorsPage, /ADVISORS_RETURN_PATH/);
+
+const dashboardPage = fs.readFileSync(path.join(frontendRoot, 'src/pages/DashboardPage.tsx'), 'utf8');
+assert.match(dashboardPage, /AdvisorProductionTable/);
+assert.match(dashboardPage, /AdvisorNameLink/);
+assert.match(dashboardPage, /DASHBOARD_RETURN_PATH/);
 
 console.log('Frontend pipeline drilldown unit checks passed');

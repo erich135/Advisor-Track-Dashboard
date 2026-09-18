@@ -1,6 +1,8 @@
 import { KeyRound, UserMinus, UserPlus } from 'lucide-react';
 import type { CompanyMember, LicencePool } from '../api/companyApi';
 import { Button, Pill, SearchFilterBar, StatCard } from '../components/ui';
+import { CompanyContextBanner } from '../components/CompanyContext';
+import { StickyHorizontalScroll } from '../components/StickyHorizontalScroll';
 import { useMemo, useState } from 'react';
 
 function memberName(member: CompanyMember): string {
@@ -14,12 +16,14 @@ function poolLabel(value: number | null): string {
 export function LicencesPanel({
   pool,
   members,
+  companyName,
   onAssign,
   onRemove,
   busyId,
 }: {
   pool: LicencePool | null;
   members: CompanyMember[];
+  companyName?: string | null;
   onAssign: (member: CompanyMember) => void;
   onRemove: (member: CompanyMember) => void;
   busyId: string | null;
@@ -43,6 +47,7 @@ export function LicencesPanel({
 
   return (
     <>
+      <CompanyContextBanner name={companyName} testId="licences-company-context" />
       <div className="grid grid-3">
         <StatCard
           label="Purchased"
@@ -79,7 +84,7 @@ export function LicencesPanel({
       </div>
 
       <div className="card">
-        <div className="table-wrap">
+        <StickyHorizontalScroll>
           <table className="data">
             <thead>
               <tr>
@@ -140,7 +145,7 @@ export function LicencesPanel({
               )}
             </tbody>
           </table>
-        </div>
+        </StickyHorizontalScroll>
       </div>
     </>
   );

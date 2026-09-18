@@ -17,6 +17,7 @@ import {
   removePlatformCustomerLicence,
 } from '../api/platformApi';
 import { Button, ConfirmModal, PageIntro, Pill, SkeletonRows, StatCard, useToast } from '../components/ui';
+import { StickyHorizontalScroll } from '../components/StickyHorizontalScroll';
 import { formatDate, formatZAR } from '../lib/format';
 import { useAsync } from '../lib/useAsync';
 import { useAuth } from '../lib/useAuth';
@@ -185,7 +186,7 @@ export default function CustomerAccountPage() {
         />
       ) : null}
 
-      {tab === 'users' ? <UsersPage scopedCompanyId={companyId} /> : null}
+      {tab === 'users' ? <UsersPage scopedCompanyId={companyId} scopedCompanyName={account.company.name} /> : null}
 
       {tab === 'subscription' ? <SubscriptionEditor companyId={companyId} onUpdated={refresh} /> : null}
 
@@ -193,6 +194,7 @@ export default function CustomerAccountPage() {
         <LicencesPanel
           pool={pool}
           members={account.members}
+          companyName={account.company.name}
           busyId={busyId}
           onAssign={(member) => setConfirm({ type: 'assign', member })}
           onRemove={(member) => setConfirm({ type: 'remove', member })}
@@ -313,7 +315,7 @@ function CustomerOverview({
         </Button>
       </div>
       <div className="card">
-        <div className="table-wrap">
+        <StickyHorizontalScroll>
           <table className="data">
             <thead>
               <tr>
@@ -347,7 +349,7 @@ function CustomerOverview({
               )}
             </tbody>
           </table>
-        </div>
+        </StickyHorizontalScroll>
       </div>
     </>
   );

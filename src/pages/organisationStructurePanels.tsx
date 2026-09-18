@@ -23,6 +23,8 @@ import {
   TextInput,
   useToast,
 } from '../components/ui';
+import { StickyHorizontalScroll } from '../components/StickyHorizontalScroll';
+import { CompanyContextBanner } from '../components/CompanyContext';
 import { formatDate } from '../lib/format';
 
 const PAGE_SIZE = 20;
@@ -76,12 +78,14 @@ export function RegionsPanel({
   members,
   canManage,
   companyId,
+  companyName,
   onChanged,
 }: {
   regions: OrganisationRegion[];
   members: CompanyMember[];
   canManage: boolean;
   companyId?: string;
+  companyName?: string | null;
   onChanged: () => void;
 }) {
   const toast = useToast();
@@ -164,6 +168,7 @@ export function RegionsPanel({
 
   return (
     <>
+      <CompanyContextBanner name={companyName} testId="regions-company-context" />
       <div className="row between" style={{ margin: '0 0 14px', gap: 12, flexWrap: 'wrap' }}>
         <SearchFilterBar value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search regions…" />
         {canManage ? (
@@ -173,7 +178,7 @@ export function RegionsPanel({
         ) : null}
       </div>
       <div className="card">
-        <div className="table-wrap">
+        <StickyHorizontalScroll>
           <table className="data">
             <thead>
               <tr>
@@ -216,7 +221,7 @@ export function RegionsPanel({
               )}
             </tbody>
           </table>
-        </div>
+        </StickyHorizontalScroll>
         {filtered.length > PAGE_SIZE ? (
           <Pagination page={currentPage} pageCount={pageCount} onPageChange={setPage} />
         ) : null}
@@ -272,6 +277,7 @@ export function TeamsPanel({
   members,
   canManage,
   companyId,
+  companyName,
   onChanged,
 }: {
   teams: OrganisationTeam[];
@@ -279,6 +285,7 @@ export function TeamsPanel({
   members: CompanyMember[];
   canManage: boolean;
   companyId?: string;
+  companyName?: string | null;
   onChanged: () => void;
 }) {
   const toast = useToast();
@@ -365,6 +372,7 @@ export function TeamsPanel({
 
   return (
     <>
+      <CompanyContextBanner name={companyName} testId="teams-company-context" />
       <div className="row between" style={{ margin: '0 0 14px', gap: 12, flexWrap: 'wrap' }}>
         <SearchFilterBar value={query} onChange={(value) => { setQuery(value); setPage(1); }} placeholder="Search teams…" />
         {canManage ? (
@@ -374,7 +382,7 @@ export function TeamsPanel({
         ) : null}
       </div>
       <div className="card">
-        <div className="table-wrap">
+        <StickyHorizontalScroll>
           <table className="data">
             <thead>
               <tr>
@@ -419,7 +427,7 @@ export function TeamsPanel({
               )}
             </tbody>
           </table>
-        </div>
+        </StickyHorizontalScroll>
         {filtered.length > PAGE_SIZE ? (
           <Pagination page={currentPage} pageCount={pageCount} onPageChange={setPage} />
         ) : null}

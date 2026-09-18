@@ -3,6 +3,7 @@ import { LifeBuoy, Inbox, CircleDot, CheckCircle2, X } from 'lucide-react';
 import { seedDataService as db } from '../data/seedDataService';
 import { useAsync } from '../lib/useAsync';
 import { Avatar, Pill, StatCard, SkeletonRows, PageIntro } from '../components/ui';
+import { StickyHorizontalScroll } from '../components/StickyHorizontalScroll';
 import { formatDate, relativeDays } from '../lib/format';
 import { users } from '../data/seed';
 import type { SupportTicket, TicketStatus, TicketPriority } from '../domain/types';
@@ -65,7 +66,7 @@ export default function SupportPage() {
       </div>
 
       <div className="card">
-        <div className="table-wrap">
+        <StickyHorizontalScroll>
           <table className="data">
             <thead>
               <tr>
@@ -109,7 +110,7 @@ export default function SupportPage() {
               })}
             </tbody>
           </table>
-        </div>
+        </StickyHorizontalScroll>
       </div>
 
       {open && (

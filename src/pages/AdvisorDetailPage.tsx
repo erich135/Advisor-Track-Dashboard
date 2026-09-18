@@ -18,10 +18,11 @@ import { ApiError } from '../api/apiClient';
 import { getCompanyMember, getCompanyMembers } from '../api/companyApi';
 import { getAdvisorSummary, type ManagementPipelineCase } from '../api/managementApi';
 import PipelineStageGraphic from '../components/PipelineStageGraphic';
+import { StickyHorizontalScroll } from '../components/StickyHorizontalScroll';
 import { Avatar, Pill, SkeletonRows } from '../components/ui';
 import { financialAdvisorsInScope, memberDisplayName } from '../lib/financialAdvisors';
 import { formatDate, formatNumber, formatZAR, relativeDays } from '../lib/format';
-import { parsePipelineReturnPath } from '../lib/pipelineReturnPath';
+import { parseAdvisorReturnPath, advisorReturnBackLabel } from '../lib/pipelineReturnPath';
 import { getPipelineStageLabel } from '../lib/pipelineStages';
 import { useAsync } from '../lib/useAsync';
 
@@ -90,7 +91,7 @@ export default function AdvisorDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const returnPath = parsePipelineReturnPath(searchParams.get('return'));
+  const returnPath = parseAdvisorReturnPath(searchParams.get('return'));
   const advisorId = id ?? '';
 
   const advisor = useAsync(() => getCompanyMember(advisorId), [advisorId]);
@@ -98,13 +99,9 @@ export default function AdvisorDetailPage() {
   const summary = useAsync(() => getAdvisorSummary(advisorId), [advisorId]);
   const advisors = financialAdvisorsInScope(members.data);
 
-  const backLink = returnPath ? (
-    <Link to={returnPath} className="back-link">
-      <ArrowLeft size={15} /> Back to Team Pipeline
-    </Link>
-  ) : (
-    <Link to="/advisors" className="back-link">
-      <ArrowLeft size={15} /> Back to advisors
+  const backLink = (
+    <Link to={returnPath || '/advisors'} className="back-link">
+      <ArrowLeft size={15} /> {advisorReturnBackLabel(returnPath)}
     </Link>
   );
 
@@ -350,7 +347,7 @@ export default function AdvisorDetailPage() {
         ) : summary.error ? (
           <div className="empty" style={{ color: 'var(--red)' }}>Current cases could not be loaded.</div>
         ) : metrics && metrics.cases.length > 0 ? (
-          <div className="table-wrap">
+          <StickyHorizontalScroll>
             <table className="data">
               <thead>
                 <tr>
@@ -396,7 +393,7 @@ export default function AdvisorDetailPage() {
                 })}
               </tbody>
             </table>
-          </div>
+          </StickyHorizontalScroll>
         ) : (
           <div className="empty">This advisor has no open cases in your current management scope.</div>
         )}

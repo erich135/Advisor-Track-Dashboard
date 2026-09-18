@@ -3,6 +3,7 @@ import { History } from 'lucide-react';
 import { ApiError } from '../api/apiClient';
 import { getPlatformCompanies, listPlatformAudit, type AdminAuditEvent } from '../api/platformApi';
 import { PageIntro, Pill, SelectInput, SkeletonRows, StatCard } from '../components/ui';
+import { StickyHorizontalScroll } from '../components/StickyHorizontalScroll';
 import { useAsync } from '../lib/useAsync';
 import { useAuth } from '../lib/useAuth';
 
@@ -134,7 +135,7 @@ export default function AuditPage() {
       </div>
 
       <div className="card">
-        <div className="table-wrap">
+        <StickyHorizontalScroll>
           <table className="data">
             <thead>
               <tr>
@@ -174,7 +175,7 @@ export default function AuditPage() {
               )}
             </tbody>
           </table>
-        </div>
+        </StickyHorizontalScroll>
       </div>
     </>
   );

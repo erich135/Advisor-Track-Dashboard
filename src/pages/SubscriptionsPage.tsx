@@ -4,6 +4,7 @@ import { CreditCard, PlayCircle, UserPlus } from 'lucide-react';
 import { ApiError } from '../api/apiClient';
 import { listPlatformSubscriptions } from '../api/platformApi';
 import { PageIntro, Pill, SkeletonRows, StatCard } from '../components/ui';
+import { StickyHorizontalScroll } from '../components/StickyHorizontalScroll';
 import { formatDate, formatZAR } from '../lib/format';
 import { useAsync } from '../lib/useAsync';
 import { useAuth } from '../lib/useAuth';
@@ -116,7 +117,7 @@ export default function SubscriptionsPage() {
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>
-        <div className="table-wrap">
+        <StickyHorizontalScroll>
           <table className="data">
             <thead>
               <tr>
@@ -189,7 +190,7 @@ export default function SubscriptionsPage() {
               )}
             </tbody>
           </table>
-        </div>
+        </StickyHorizontalScroll>
       </div>
 
       {selectedId ? <SubscriptionEditor companyId={selectedId} onUpdated={refresh} /> : null}

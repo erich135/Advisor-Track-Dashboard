@@ -16,6 +16,8 @@ import {
 } from '../api/companyApi';
 import { useAsync } from '../lib/useAsync';
 import { Avatar, Pill, SkeletonRows, PageIntro } from '../components/ui';
+import { StickyHorizontalScroll } from '../components/StickyHorizontalScroll';
+import { CompanyContextBanner } from '../components/CompanyContext';
 
 const AVATAR_COLORS = ['#0E51E4', '#8957e5', '#2da44e', '#bf8700', '#cf222e', '#020921', '#1a7f37'];
 
@@ -228,7 +230,7 @@ export default function SettingsPage() {
   const roles = pageData!.roles;
   const permissions = pageData!.permissions;
   const canManageRoles = me.isPlatformAdmin || me.permissions.includes('manage_roles');
-  const companyName = me.company?.name ?? '—';
+  const companyName = me.company?.name?.trim() || '—';
   const envLabel = isLocalBackend() ? 'Local development' : 'Connected API';
 
   return (
@@ -238,6 +240,7 @@ export default function SettingsPage() {
           ? 'Company access, roles, and permissions for your organisation.'
           : 'Company access, roles, and permissions for your organisation. Role management is read-only for your account.'}
       </PageIntro>
+      <CompanyContextBanner name={me.company?.name} />
 
       {feedback ? (
         <div
@@ -261,7 +264,7 @@ export default function SettingsPage() {
               {membersUnavailable ? 'Not available for your permissions' : 'Company members in your access scope'}
             </span>
           </div>
-          <div className="table-wrap">
+          <StickyHorizontalScroll>
             <table className="data">
               <thead>
                 <tr><th>Member</th><th>Email</th><th>Role</th></tr>
@@ -306,7 +309,7 @@ export default function SettingsPage() {
                 )}
               </tbody>
             </table>
-          </div>
+          </StickyHorizontalScroll>
         </div>
 
         <div className="card">
@@ -518,7 +521,7 @@ export default function SettingsPage() {
             </div>
           </div>
         ) : null}
-        <div className="table-wrap">
+        <StickyHorizontalScroll>
           {roles.length === 0 || permissions.length === 0 ? (
             <div className="empty">No roles or permissions available for this company yet.</div>
           ) : (
@@ -596,7 +599,7 @@ export default function SettingsPage() {
               </tbody>
             </table>
           )}
-        </div>
+        </StickyHorizontalScroll>
       </div>
     </>
   );

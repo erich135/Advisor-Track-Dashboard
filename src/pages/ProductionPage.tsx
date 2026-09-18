@@ -17,6 +17,7 @@ import {
 } from '../api/managementApi';
 import { useAsync } from '../lib/useAsync';
 import { Avatar, EmptyState, Pill, StatCard, SkeletonRows, PageIntro } from '../components/ui';
+import { StickyHorizontalScroll } from '../components/StickyHorizontalScroll';
 import { formatZAR, formatDate } from '../lib/format';
 
 const AVATAR_COLORS = ['#0E51E4', '#8250df', '#1a7f37', '#9a6700', '#020921'];
@@ -141,7 +142,7 @@ export default function ProductionPage() {
       </div>
 
       <div className="card">
-        <div className="table-wrap">
+        <StickyHorizontalScroll>
           <table className="data">
             <thead>
               <tr>
@@ -180,7 +181,7 @@ export default function ProductionPage() {
               })}
             </tbody>
           </table>
-        </div>
+        </StickyHorizontalScroll>
       </div>
     </>
   );

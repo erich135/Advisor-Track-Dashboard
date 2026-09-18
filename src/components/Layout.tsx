@@ -1,4 +1,4 @@
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import {
   LayoutDashboard,
@@ -14,67 +14,96 @@ import {
   FileText,
   History,
   ClipboardList,
+  Shield,
+  KeyRound,
+  Upload,
+  Network,
 } from 'lucide-react';
 import { BrandLogo } from './BrandLogo';
+import { CompanyContextMark } from './CompanyContext';
 import { Avatar } from './ui';
 import { users } from '../data/seed';
+import { sessionCompanyName } from '../lib/companyContext';
+import { ENTERPRISE_PLAN_NAME } from '../lib/enterpriseContract';
+import {
+  buildCustomerNav,
+  buildPlatformNav,
+  navItemIsActive,
+  type PortalNavItem,
+  type PortalNavSection,
+} from '../lib/portalNavigation';
 import { useAuth } from '../lib/useAuth';
 import { useDemoSession } from '../lib/demoSession';
-import {
-  hasLeadershipPortalAccess,
-  isCustomerExecutive,
-  isCustomerPeopleManager,
-} from '../lib/portalAccess';
+import { AssistantShell } from './assistant/AssistantShell';
 
-interface NavEntry {
-  to: string;
-  label: string;
-  icon: ReactNode;
-  badge?: number;
+function NavIcon({ item }: { item: PortalNavItem }) {
+  if (item.highlight === 'regions') return <Network size={18} />;
+  switch (item.to.split('?')[0]) {
+    case '/':
+      return <LayoutDashboard size={18} />;
+    case '/team-pipeline':
+    case '/team-pipeline-demo':
+      return <FolderKanban size={18} />;
+    case '/advisors':
+      return <Users size={18} />;
+    case '/production':
+      return <TrendingUp size={18} />;
+    case '/users':
+      return <UserCog size={18} />;
+    case '/licences':
+    case '/licence-requests':
+      return <KeyRound size={18} />;
+    case '/bulk-import':
+      return <Upload size={18} />;
+    case '/settings':
+      return <Settings size={18} />;
+    case '/subscription':
+    case '/subscriptions':
+      return <CreditCard size={18} />;
+    case '/invoices':
+      return <FileText size={18} />;
+    case '/companies':
+      return <Building2 size={18} />;
+    case '/performance':
+      return <BarChart3 size={18} />;
+    case '/audit':
+      return <History size={18} />;
+    case '/enterprise-customers':
+      return <Shield size={18} />;
+    case '/engineering/changelog':
+      return <ClipboardList size={18} />;
+    default:
+      return <LayoutDashboard size={18} />;
+  }
 }
 
-const primaryNav: NavEntry[] = [
-  { to: '/', label: 'Dashboard', icon: <LayoutDashboard size={18} /> },
-  { to: '/team-pipeline', label: 'Team Pipeline', icon: <FolderKanban size={18} /> },
-  { to: '/advisors', label: 'Advisors', icon: <Users size={18} /> },
-  { to: '/production', label: 'Production', icon: <TrendingUp size={18} /> },
-];
-
-const businessNav: NavEntry[] = [
-  { to: '/subscriptions', label: 'Subscriptions', icon: <CreditCard size={18} /> },
-  { to: '/invoices', label: 'Invoices', icon: <FileText size={18} /> },
-  { to: '/companies', label: 'Companies', icon: <Building2 size={18} /> },
-];
-
-const adminNav: NavEntry[] = [
-  { to: '/users', label: 'Users & Access', icon: <UserCog size={18} /> },
-  { to: '/settings', label: 'Settings & Roles', icon: <Settings size={18} /> },
-];
-
-/** Founders-only nav (reports etc.) — shown above admin section. */
-const managementNav: NavEntry[] = [
-  { to: '/performance', label: 'Performance', icon: <BarChart3 size={18} /> },
-  { to: '/audit', label: 'Audit', icon: <History size={18} /> },
-];
-
-const engineeringNav: NavEntry[] = [
-  { to: '/engineering/changelog', label: 'Change Log', icon: <ClipboardList size={18} /> },
-];
-
-function NavList({ items }: { items: NavEntry[] }) {
+function NavList({ items }: { items: PortalNavItem[] }) {
+  const { pathname, search } = useLocation();
   return (
     <>
       {items.map((item) => (
-        <NavLink
-          key={item.to}
+        <Link
+          key={`${item.to}:${item.highlight ?? 'default'}`}
           to={item.to}
-          end={item.to === '/'}
-          className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}
+          className={`nav-item ${navItemIsActive(item, pathname, search) ? 'active' : ''}`}
+          aria-current={navItemIsActive(item, pathname, search) ? 'page' : undefined}
         >
-          {item.icon}
+          <NavIcon item={item} />
           <span>{item.label}</span>
-          {item.badge ? <span className="badge">{item.badge}</span> : null}
-        </NavLink>
+        </Link>
+      ))}
+    </>
+  );
+}
+
+function NavSections({ sections }: { sections: PortalNavSection[] }) {
+  return (
+    <>
+      {sections.map((entry) => (
+        <div key={entry.id} className="nav-section">
+          <div className="nav-section-label">{entry.label}</div>
+          <NavList items={entry.items} />
+        </div>
       ))}
     </>
   );
@@ -94,16 +123,38 @@ const titles: Record<string, { title: string; sub: string }> = {
   '/performance': { title: 'Performance', sub: 'Team and advisor operational performance' },
   '/reports': { title: 'Performance', sub: 'Team and advisor operational performance' },
   '/users': { title: 'Users & Access', sub: 'People in your authorised management scope' },
+  '/licences': { title: 'Licences', sub: 'Purchased, assigned and available company licences' },
+  '/subscription': { title: 'Subscription', sub: 'Your organisation’s AdvisorTrack Enterprise contract' },
+  '/bulk-import': { title: 'Bulk Import', sub: 'Import users into your organisation with an Excel workbook' },
   '/settings': { title: 'Settings & Roles', sub: 'Team access and permissions' },
   '/engineering/changelog': {
     title: 'Engineering Change Log',
     sub: 'Pinned decisions and recent internal changes',
   },
+  '/enterprise-customers': {
+    title: 'Enterprise Customers',
+    sub: 'Internal AdvisorTrack onboarding — not a customer portal',
+  },
+  '/licence-requests': {
+    title: 'Licence Requests',
+    sub: 'Internal queue for additional purchased licences',
+  },
   '/not-found': { title: 'Page not found', sub: 'This address is not part of the Management Portal' },
 };
 
+const engineeringNav: PortalNavItem[] = [
+  { to: '/engineering/changelog', label: 'Change Log' },
+];
+
+const founderOverview: PortalNavItem[] = [
+  { to: '/', label: 'Dashboard' },
+  { to: '/team-pipeline', label: 'Team Pipeline' },
+  { to: '/advisors', label: 'Advisors' },
+  { to: '/production', label: 'Production' },
+];
+
 export default function Layout({ children }: { children: ReactNode }) {
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const navigate = useNavigate();
   const { signOut, session } = useAuth();
   const { selectedDemoUser, resetDemoUser } = useDemoSession();
@@ -117,12 +168,15 @@ export default function Layout({ children }: { children: ReactNode }) {
       : pathname === '/'
         ? '/'
         : prefixKey ?? '/not-found';
+  const usersTab = new URLSearchParams(search).get('tab');
   const header =
     isDemoRoute && selectedDemoUser
       ? { title: 'Team Pipeline', sub: `${selectedDemoUser.name} · ${selectedDemoUser.role}` }
       : matchKey === '/customer-account'
         ? { title: 'Customer account', sub: 'Connected subscription, users, licences and invoices' }
-        : titles[matchKey] ?? titles['/not-found'];
+        : pathname === '/users' && (usersTab === 'regions' || usersTab === 'teams')
+          ? { title: 'Regions & Teams', sub: 'Regions and teams in your authorised organisation' }
+          : titles[matchKey] ?? titles['/not-found'];
 
   if (isDemoRoute && !selectedDemoUser) {
     return <>{children}</>;
@@ -137,19 +191,17 @@ export default function Layout({ children }: { children: ReactNode }) {
     session?.role?.name ||
     (session?.isPlatformAdmin ? 'App Admin' : null) ||
     'AdvisorTrack user';
+  const companyName = sessionCompanyName(session);
   const profile = isDemoRoute ? selectedDemoUser! : { ...me, name: sessionName };
   const profileRole = isDemoRoute ? selectedDemoUser!.role : sessionRole;
   const profileSub = isDemoRoute ? selectedDemoUser!.scopeLabel : session?.organisation?.name || sessionRole;
   const isFounderDemo = isDemoRoute && selectedDemoUser?.role === 'Founder/Admin';
   const profileAvatarColor = isDemoRoute ? (isFounderDemo ? '#8b5cf6' : '#1f6feb') : 'var(--brand)';
-  const demoNav: NavEntry[] = isFounderDemo
-    ? [...primaryNav, ...businessNav, ...managementNav, ...adminNav]
-    : [{ to: '/team-pipeline-demo', label: 'Team Pipeline', icon: <FolderKanban size={18} /> }];
-  const leadershipAccess = hasLeadershipPortalAccess(session);
-  const customerAdminNav: NavEntry[] = [
-    ...(isCustomerPeopleManager(session) ? [adminNav[0]] : []),
-    ...(isCustomerExecutive(session) || session?.isPlatformAdmin ? [adminNav[1]] : []),
-  ].filter((item, index, list) => list.findIndex((entry) => entry.to === item.to) === index);
+  const demoNav: PortalNavItem[] = isFounderDemo
+    ? founderOverview
+    : [{ to: '/team-pipeline-demo', label: 'Team Pipeline' }];
+  const customerSections = buildCustomerNav(session, 'production');
+  const platformSections = buildPlatformNav(session);
 
   return (
     <div className="app-shell">
@@ -167,41 +219,12 @@ export default function Layout({ children }: { children: ReactNode }) {
           ) : isDemoRoute && isFounderDemo ? (
             <>
               <div className="nav-section-label">Overview</div>
-              <NavList items={primaryNav} />
-              <div className="nav-section-label">Business</div>
-              <NavList items={businessNav} />
-              <div className="nav-section-label">Management</div>
-              <NavList items={managementNav} />
-              <div className="nav-section-label">Admin</div>
-              <NavList items={adminNav} />
+              <NavList items={founderOverview} />
             </>
           ) : session?.isPlatformAdmin ? (
-            <>
-              <div className="nav-section-label">Overview</div>
-              <NavList items={primaryNav} />
-              <div className="nav-section-label">Business</div>
-              <NavList items={businessNav} />
-              <div className="nav-section-label">Management</div>
-              <NavList items={managementNav} />
-              <div className="nav-section-label">Admin</div>
-              <NavList items={adminNav} />
-            </>
-          ) : leadershipAccess ? (
-            <>
-              <div className="nav-section-label">Overview</div>
-              <NavList items={primaryNav} />
-              {customerAdminNav.length > 0 ? (
-                <>
-                  <div className="nav-section-label">Admin</div>
-                  <NavList items={customerAdminNav} />
-                </>
-              ) : null}
-            </>
+            <NavSections sections={platformSections} />
           ) : (
-            <>
-              <div className="nav-section-label">Overview</div>
-              <NavList items={[{ to: '/', label: 'Dashboard', icon: <LayoutDashboard size={18} /> }]} />
-            </>
+            <NavSections sections={customerSections} />
           )}
           {!isDemoRoute && session?.canAccessEngineeringChangelog ? (
             <>
@@ -220,7 +243,9 @@ export default function Layout({ children }: { children: ReactNode }) {
               <div className="r" style={{ fontSize: 11 }}>
                 {profileSub}
               </div>
-            ) : null}
+            ) : (
+              <CompanyContextMark name={companyName} plan={ENTERPRISE_PLAN_NAME} testId="sidebar-company-context" />
+            )}
           </div>
           <button
             onClick={() => {
@@ -259,11 +284,15 @@ export default function Layout({ children }: { children: ReactNode }) {
           </div>
           <div className="sub">· {header.sub}</div>
           <div className="spacer" />
+          {isDemoRoute ? null : <CompanyContextMark name={companyName} plan={ENTERPRISE_PLAN_NAME} />}
         </header>
         <div className="page" style={isDemoRoute ? { maxWidth: 'none' } : undefined}>
           {children}
         </div>
       </div>
+      {isDemoRoute ? null : (
+        <AssistantShell environment="production" />
+      )}
     </div>
   );
 }
