@@ -1526,7 +1526,7 @@ textarea.input:focus {
   cursor: not-allowed;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 767px) {
   .assistant-panel,
   .assistant-panel-loading {
     right: 12px;
@@ -1538,6 +1538,9 @@ textarea.input:focus {
   .assistant-launcher {
     right: 16px;
     bottom: 28px;
+  }
+  .advisor-shell .assistant-launcher {
+    bottom: calc(var(--advisor-bottom-h, 64px) + env(safe-area-inset-bottom, 0px) + 12px);
   }
 }
 
