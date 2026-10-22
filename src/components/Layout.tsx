@@ -1,4 +1,4 @@
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useOutlet } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import {
   LayoutDashboard,
@@ -35,6 +35,7 @@ import {
 import { useAuth } from '../lib/useAuth';
 import { useDemoSession } from '../lib/demoSession';
 import { AssistantShell } from './assistant/AssistantShell';
+import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 
 function NavIcon({ item }: { item: PortalNavItem }) {
   if (item.highlight === 'regions') return <Network size={18} />;
@@ -153,8 +154,10 @@ const founderOverview: PortalNavItem[] = [
   { to: '/production', label: 'Production' },
 ];
 
-export default function Layout({ children }: { children: ReactNode }) {
+export default function Layout({ children }: { children?: ReactNode }) {
   const { pathname, search } = useLocation();
+  const outlet = useOutlet();
+  const content = children ?? outlet;
   const navigate = useNavigate();
   const { signOut, session } = useAuth();
   const { selectedDemoUser, resetDemoUser } = useDemoSession();
@@ -284,10 +287,11 @@ export default function Layout({ children }: { children: ReactNode }) {
           </div>
           <div className="sub">· {header.sub}</div>
           <div className="spacer" />
+          {isDemoRoute ? null : <WorkspaceSwitcher />}
           {isDemoRoute ? null : <CompanyContextMark name={companyName} plan={ENTERPRISE_PLAN_NAME} />}
         </header>
         <div className="page" style={isDemoRoute ? { maxWidth: 'none' } : undefined}>
-          {children}
+          {content}
         </div>
       </div>
       {isDemoRoute ? null : (

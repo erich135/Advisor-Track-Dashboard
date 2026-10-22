@@ -11,6 +11,7 @@ import {
   isCustomerPeopleManager,
   isOrganisationAdmin,
 } from './portalAccess';
+import { canUseAdvisorWorkspace } from './workspace';
 
 /**
  * Customer sidebar IA — keep in parity with advisortrack-demo-frontend.
@@ -86,7 +87,7 @@ export function buildCustomerNav(
   const overview = section(
     'overview',
     'Overview',
-    leadership ? overviewLeadership : overviewDashboardOnly,
+    leadership ? overviewLeadership : canUseAdvisorWorkspace(session) ? [] : overviewDashboardOnly,
   );
 
   const organisationItems: PortalNavItem[] = [];

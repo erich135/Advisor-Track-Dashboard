@@ -137,10 +137,7 @@ assert.equal(tlItems.includes('Invoices'), false);
 assert.equal(tlItems.includes('Settings & Roles'), false);
 
 const orgItems = itemLabels(orgAdminNav);
-assert.deepEqual(
-  orgAdminNav.find((section) => section.id === 'overview')?.items.map((item) => item.to),
-  ['/'],
-);
+assert.equal(orgAdminNav.find((section) => section.id === 'overview'), undefined);
 assert.ok(orgItems.includes('Users & Access'));
 assert.ok(orgItems.includes('Licences'));
 assert.equal(orgItems.includes('Bulk Import'), false);
@@ -151,8 +148,8 @@ assert.equal(orgItems.includes('Performance'), false);
 assert.equal(orgItems.includes('Settings & Roles'), false);
 
 const faItems = itemLabels(faNav);
-assert.deepEqual(faItems, ['Dashboard']);
-assert.equal(faNav.length, 1);
+assert.deepEqual(faItems, []);
+assert.equal(faNav.length, 0);
 
 const platformTos = flattenNavTos(platformNav);
 assert.equal(platformTos.includes('/enterprise-customers'), false);

@@ -7,6 +7,7 @@ import ActivateAccountPage from './pages/ActivateAccountPage';
 import { ToastProvider } from './components/ui';
 import { useAuth } from './lib/useAuth';
 import './styles/global.css';
+import './styles/advisor.css';
 
 function Root() {
   const { status, authed, login } = useAuth();
