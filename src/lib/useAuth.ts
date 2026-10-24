@@ -9,6 +9,8 @@ import {
 import { getMe, login as loginRequest, type AuthUser } from '../api/authApi';
 import { getCompanyMe, type CompanyMe } from '../api/companyApi';
 import { getSubscriptionMe, type SubscriptionMe } from '../api/subscriptionApi';
+import { resetAdvisorTrackAssistantConversation } from '../api/assistantApi';
+import { clearAllDexTranscripts } from './dexConversationStorage';
 
 const SESSION_KEY = 'at_session';
 
@@ -73,6 +75,7 @@ function writeStoredSession(session: AuthSession | null) {
 function clearLocalSession() {
   clearStoredToken();
   writeStoredSession(null);
+  clearAllDexTranscripts();
   setSnapshot({ status: 'ready', session: null });
 }
 
@@ -199,6 +202,7 @@ export function useAuth() {
   const login = useCallback(async (email: string, password: string) => {
     try {
       const result = await loginRequest(email.trim(), password);
+      clearAllDexTranscripts();
       setStoredToken(result.token);
       const next = await loadPostLoginSession(result.user);
       writeStoredSession(next);
@@ -213,7 +217,11 @@ export function useAuth() {
   }, []);
 
   const signOut = useCallback(() => {
+    const token = getStoredToken();
     clearLocalSession();
+    if (token) {
+      void resetAdvisorTrackAssistantConversation({ token }).catch(() => undefined);
+    }
   }, []);
 
   return {
