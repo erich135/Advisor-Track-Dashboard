@@ -7,6 +7,7 @@ import {
 import { Button, Field, TextInput } from '../../components/ui';
 import { formatZAR } from '../../lib/format';
 import { RATIO_FIELDS, configErrorMessage, sliderPercent } from './configWorkflow';
+import DexMemorySettings from './DexMemorySettings';
 
 export default function AdvisorSettingsPage() {
   const [settings, setSettings] = useState<AdvisorPlanningSettings | null>(null);
@@ -129,6 +130,7 @@ export default function AdvisorSettingsPage() {
               Adaptive ratios enabled
             </label>
           </section>
+          <DexMemorySettings />
           <Button type="button" variant="primary" disabled={saving} onClick={() => void onSave()}>
             {saving ? 'Saving…' : 'Save settings'}
           </Button>

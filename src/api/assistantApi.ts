@@ -16,6 +16,22 @@ export type AssistantConversationTurn = {
   text: string;
 };
 
+export type DexMemoryPreference = {
+  enabled: boolean;
+  consentedAt: string | null;
+  disabledAt: string | null;
+  revision: number;
+};
+
+export type DexMemoryFact = {
+  id: string;
+  kind: 'preference' | 'personal_fact';
+  category: 'language' | 'brevity' | 'personal' | 'other';
+  text: string;
+  createdAt: string;
+  expiresAt: string;
+};
+
 /**
  * Server-side Assistant ask (A6). Identity is reconstructed by the API.
  * The browser may send only the question and current path.
@@ -49,4 +65,30 @@ export async function resetAdvisorTrackAssistantConversation(options?: {
     token: options?.token,
     skipUnauthorizedHandler: true,
   });
+}
+
+export async function getDexMemoryPreference(): Promise<DexMemoryPreference> {
+  return apiRequest('/assistant/memory/preference');
+}
+
+export async function setDexMemoryPreference(enabled: boolean): Promise<DexMemoryPreference> {
+  return apiRequest('/assistant/memory/preference', {
+    method: 'PUT',
+    body: { enabled },
+  });
+}
+
+export async function listDexMemories(): Promise<{ facts: DexMemoryFact[] }> {
+  return apiRequest('/assistant/memory');
+}
+
+export async function forgetDexMemory(memoryId: string): Promise<{ forgotten: boolean }> {
+  return apiRequest('/assistant/memory/forget', {
+    method: 'POST',
+    body: { memoryId },
+  });
+}
+
+export async function forgetAllDexMemories(): Promise<{ forgotten: number }> {
+  return apiRequest('/assistant/memory/forget-all', { method: 'POST' });
 }
