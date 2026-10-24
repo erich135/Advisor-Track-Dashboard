@@ -211,12 +211,19 @@ if (isDemoFrontend) {
   assert.doesNotMatch(assistantApi, /\/assistant\/memory/);
 } else {
   assert.match(settingsPage, /DexMemorySettings/);
-  assert.match(src('src/pages/advisor/DexMemorySettings.tsx'), /dex-memory-settings/);
-  assert.match(src('src/pages/advisor/DexMemorySettings.tsx'), /Forget all facts/);
-  assert.match(src('src/pages/advisor/DexMemorySettings.tsx'), /DEX_MEMORY_CHANGED_EVENT/);
-  assert.match(src('src/pages/advisor/DexMemorySettings.tsx'), /visibilitychange/);
+  const memorySettings = src('src/pages/advisor/DexMemorySettings.tsx');
+  assert.match(memorySettings, /dex-memory-settings/);
+  assert.match(memorySettings, /Forget all facts/);
+  assert.match(memorySettings, /DEX_MEMORY_CHANGED_EVENT/);
+  assert.match(memorySettings, /visibilitychange/);
+  assert.match(memorySettings, /preference\.available === false/);
+  assert.match(memorySettings, /dex-memory-unavailable/);
+  assert.match(memorySettings, /not currently available/i);
+  assert.match(memorySettings, /dex-memory-toggle/);
+  assert.doesNotMatch(memorySettings, /Promise\.all\(\[getDexMemoryPreference\(\), listDexMemories\(\)\]\)/);
   assert.match(assistantApi, /\/assistant\/memory\/preference/);
   assert.match(assistantApi, /\/assistant\/memory\/forget-all/);
+  assert.match(assistantApi, /available: boolean/);
 }
 
 console.log(

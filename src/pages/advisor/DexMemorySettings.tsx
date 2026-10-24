@@ -11,11 +11,22 @@ import { ApiError } from '../../api/apiClient';
 import { Button, ConfirmModal } from '../../components/ui';
 import { DEX_MEMORY_CHANGED_EVENT } from '../../lib/dexConversationStorage';
 
+const UNAVAILABLE_CODES = new Set([
+  'MEMORY_FEATURE_DISABLED',
+  'MEMORY_UNAVAILABLE',
+  'MEMORY_ENCRYPTION_UNAVAILABLE',
+]);
+
+const UNAVAILABLE_COPY =
+  'Persistent Dex memory is not currently available. Dex can still follow this visit. Facts are not saved across logins until this feature is enabled.';
+
+function isUnavailableError(caught: unknown): boolean {
+  return caught instanceof ApiError && UNAVAILABLE_CODES.has(caught.code);
+}
+
 function memoryError(caught: unknown, fallback: string): string {
   if (caught instanceof ApiError) {
-    if (caught.code === 'MEMORY_ENCRYPTION_UNAVAILABLE') {
-      return 'Persistent Dex memory is unavailable until encryption is configured.';
-    }
+    if (UNAVAILABLE_CODES.has(caught.code)) return UNAVAILABLE_COPY;
     if (caught.code === 'NO_COMPANY') return 'Dex memory needs an organisation.';
     return caught.message || fallback;
   }
@@ -23,6 +34,7 @@ function memoryError(caught: unknown, fallback: string): string {
 }
 
 export default function DexMemorySettings() {
+  const [available, setAvailable] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [facts, setFacts] = useState<DexMemoryFact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,8 +45,20 @@ export default function DexMemorySettings() {
   const [pendingForgetId, setPendingForgetId] = useState<string | null>(null);
 
   async function load() {
-    const [preference, list] = await Promise.all([getDexMemoryPreference(), listDexMemories()]);
+    const preference = await getDexMemoryPreference();
+    if (preference.available === false) {
+      setAvailable(false);
+      setEnabled(false);
+      setFacts([]);
+      return;
+    }
+    setAvailable(true);
     setEnabled(preference.enabled);
+    if (!preference.enabled) {
+      setFacts([]);
+      return;
+    }
+    const list = await listDexMemories();
     setFacts(list.facts);
   }
 
@@ -47,7 +71,17 @@ export default function DexMemorySettings() {
         await load();
         if (!cancelled) setError(null);
       } catch (caught) {
-        if (!cancelled) setError(memoryError(caught, 'Dex memory could not be loaded.'));
+        if (!cancelled) {
+          if (isUnavailableError(caught)) {
+            setAvailable(false);
+            setEnabled(false);
+            setFacts([]);
+            setError(null);
+          } else {
+            setAvailable(false);
+            setError(memoryError(caught, 'Dex memory could not be loaded.'));
+          }
+        }
       } finally {
         if (isInitial && !cancelled) setLoading(false);
       }
@@ -70,6 +104,7 @@ export default function DexMemorySettings() {
   }, []);
 
   async function onToggle(next: boolean) {
+    if (!available) return;
     if (!next) {
       setConfirm('disable');
       return;
@@ -84,7 +119,14 @@ export default function DexMemorySettings() {
       const list = await listDexMemories();
       setFacts(list.facts);
     } catch (caught) {
-      setError(memoryError(caught, 'Dex memory could not be updated.'));
+      if (isUnavailableError(caught)) {
+        setAvailable(false);
+        setEnabled(false);
+        setFacts([]);
+        setError(null);
+      } else {
+        setError(memoryError(caught, 'Dex memory could not be updated.'));
+      }
     } finally {
       setBusy(false);
     }
@@ -101,13 +143,21 @@ export default function DexMemorySettings() {
       setFacts([]);
       setBanner('Persistent Dex memory is off and saved facts for this organisation have been cleared.');
     } catch (caught) {
-      setError(memoryError(caught, 'Dex memory could not be updated.'));
+      if (isUnavailableError(caught)) {
+        setAvailable(false);
+        setEnabled(false);
+        setFacts([]);
+        setError(null);
+      } else {
+        setError(memoryError(caught, 'Dex memory could not be updated.'));
+      }
     } finally {
       setBusy(false);
     }
   }
 
   async function onForget(id: string) {
+    if (!available) return;
     setPendingForgetId(id);
     setConfirm('forget-one');
   }
@@ -116,7 +166,7 @@ export default function DexMemorySettings() {
     const id = pendingForgetId;
     setConfirm(null);
     setPendingForgetId(null);
-    if (!id) return;
+    if (!id || !available) return;
     setBusy(true);
     setError(null);
     setBanner(null);
@@ -129,7 +179,14 @@ export default function DexMemorySettings() {
         setBanner('That saved fact has been forgotten.');
       }
     } catch (caught) {
-      setError(memoryError(caught, 'Dex could not forget that fact.'));
+      if (isUnavailableError(caught)) {
+        setAvailable(false);
+        setEnabled(false);
+        setFacts([]);
+        setError(null);
+      } else {
+        setError(memoryError(caught, 'Dex could not forget that fact.'));
+      }
     } finally {
       setBusy(false);
     }
@@ -137,6 +194,7 @@ export default function DexMemorySettings() {
 
   async function confirmForgetAll() {
     setConfirm(null);
+    if (!available) return;
     setBusy(true);
     setError(null);
     setBanner(null);
@@ -149,7 +207,14 @@ export default function DexMemorySettings() {
           : 'There were no saved facts to clear.',
       );
     } catch (caught) {
-      setError(memoryError(caught, 'Dex could not clear saved facts.'));
+      if (isUnavailableError(caught)) {
+        setAvailable(false);
+        setEnabled(false);
+        setFacts([]);
+        setError(null);
+      } else {
+        setError(memoryError(caught, 'Dex could not clear saved facts.'));
+      }
     } finally {
       setBusy(false);
     }
@@ -165,39 +230,48 @@ export default function DexMemorySettings() {
         sensitive disclosures. Dex uses them only when they are relevant.
       </p>
       {loading ? <p className="advisor-home-muted">Loading Dex memory…</p> : null}
-      {error ? <p className="advisor-config-error">{error}</p> : null}
+      {!loading && error ? <p className="advisor-config-error">{error}</p> : null}
+      {!loading && !error && !available ? (
+        <p className="advisor-home-muted" data-testid="dex-memory-unavailable">
+          {UNAVAILABLE_COPY}
+        </p>
+      ) : null}
       {banner ? <p className="advisor-config-banner">{banner}</p> : null}
-      <label className="advisor-config-check">
-        <input
-          type="checkbox"
-          data-testid="dex-memory-toggle"
-          checked={enabled}
-          disabled={loading || busy}
-          onChange={(event) => void onToggle(event.target.checked)}
-        />
-        Remember facts I ask Dex to save, across logins on this organisation
-      </label>
-      {enabled ? (
+      {!loading && !error && available ? (
         <>
-          {facts.length === 0 ? (
-            <p className="advisor-home-muted">No saved facts yet. Ask Dex to remember something.</p>
-          ) : (
-            <ul className="advisor-config-list" data-testid="dex-memory-facts">
-              {facts.map((fact) => (
-                <li key={fact.id}>
-                  <span>{fact.text}</span>
-                  <Button type="button" disabled={busy} onClick={() => void onForget(fact.id)}>
-                    Forget
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-          <div className="advisor-config-actions">
-            <Button type="button" disabled={busy || facts.length === 0} onClick={() => setConfirm('forget-all')}>
-              Forget all facts
-            </Button>
-          </div>
+          <label className="advisor-config-check">
+            <input
+              type="checkbox"
+              data-testid="dex-memory-toggle"
+              checked={enabled}
+              disabled={busy}
+              onChange={(event) => void onToggle(event.target.checked)}
+            />
+            Remember facts I ask Dex to save, across logins on this organisation
+          </label>
+          {enabled ? (
+            <>
+              {facts.length === 0 ? (
+                <p className="advisor-home-muted">No saved facts yet. Ask Dex to remember something.</p>
+              ) : (
+                <ul className="advisor-config-list" data-testid="dex-memory-facts">
+                  {facts.map((fact) => (
+                    <li key={fact.id}>
+                      <span>{fact.text}</span>
+                      <Button type="button" disabled={busy} onClick={() => void onForget(fact.id)}>
+                        Forget
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="advisor-config-actions">
+                <Button type="button" disabled={busy || facts.length === 0} onClick={() => setConfirm('forget-all')}>
+                  Forget all facts
+                </Button>
+              </div>
+            </>
+          ) : null}
         </>
       ) : null}
       <ConfirmModal
@@ -215,7 +289,7 @@ export default function DexMemorySettings() {
               ? 'Dex will forget this saved fact. This visit’s chat is unchanged.'
               : 'This forgets every saved Dex fact for you in this organisation. This visit’s chat is unchanged.'
         }
-        open={confirm !== null}
+        open={confirm !== null && available}
         confirmLabel={confirm === 'disable' ? 'Turn off' : 'Forget'}
         onConfirm={() => {
           if (confirm === 'disable') void confirmDisable();

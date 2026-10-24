@@ -17,6 +17,7 @@ export type AssistantConversationTurn = {
 };
 
 export type DexMemoryPreference = {
+  available: boolean;
   enabled: boolean;
   consentedAt: string | null;
   disabledAt: string | null;
